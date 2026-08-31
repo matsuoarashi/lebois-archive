@@ -8,7 +8,7 @@
 
 /* ====================== 設定 ====================== */
 
-var SH_ORDER = '発注表';       // 既存シート（引取日・発注期限・商品ごとの発注数）
+var SH_ORDER = '製造品目';     // 既存シート（引取日・発注期限・商品ごとの発注数）
 var SH_STOCK = '在庫台帳';     // 自動生成
 var SH_LOG   = '日次ログ';     // 自動生成
 var SH_MAP   = '商品対応表';   // 自動生成
@@ -49,10 +49,16 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('le bois 日報')
     .addItem('初期セットアップ（シートを作る）', 'setup')
-    .addItem('Squareの店舗一覧を見る', 'showLocations')
-    .addItem('今日のデータを試しに取る', 'showToday')
+    .addItem('Squareの店舗一覧を見る', 'menuLocations')
+    .addItem('今日のデータを試しに取る', 'menuToday')
     .addToUi();
 }
+
+/* メニューから呼ぶもの（ダイアログを出す）。
+   エディタから実行するとダイアログの返事を待って止まらなくなるので、
+   エディタでの動作確認には showLocations / showToday（ログに書くだけ）を使う。 */
+function menuLocations() { SpreadsheetApp.getUi().alert(locationsText_()); }
+function menuToday()     { SpreadsheetApp.getUi().alert(todayText_()); }
 
 /* ====================== セットアップ ====================== */
 
@@ -266,13 +272,16 @@ function squareLocationId_() {
   return hit.id;
 }
 
-function showLocations() {
+function locationsText_() {
   var body = squareCall_('/v2/locations', 'get');
   var lines = (body.locations || []).map(function (l) {
     return l.name + '  →  ' + l.id + '  (' + l.status + ')';
   });
-  SpreadsheetApp.getUi().alert('Squareの店舗一覧\n\n' + lines.join('\n'));
+  return 'Squareの店舗一覧\n\n' + lines.join('\n');
 }
+
+/** エディタから実行して実行ログで確かめる用 */
+function showLocations() { Logger.log(locationsText_()); }
 
 /**
  * 当日（3:00〜翌2:59 JST、Squareのレポート日に合わせる）の
@@ -324,14 +333,16 @@ function fetchSquareToday_() {
   return { sales: sales, cash: cash, items: items };
 }
 
-function showToday() {
+function todayText_() {
   var d = getToday();
   var lines = Object.keys(d.items).map(function (k) { return k + ' ' + d.items[k]; });
-  SpreadsheetApp.getUi().alert(
-    '総売上 ' + d.sales + ' / 現金 ' + d.cash + '\n\n' +
+  return '総売上 ' + d.sales + ' / 現金 ' + d.cash + '\n\n' +
     lines.join('\n') + '\n\n' +
-    '入荷: ' + JSON.stringify(d.arrivals) + '\n\n' + d.note);
+    '入荷: ' + JSON.stringify(d.arrivals) + '\n\n' + d.note;
 }
+
+/** エディタから実行して実行ログで確かめる用 */
+function showToday() { Logger.log(todayText_()); }
 
 /* ====================== 送信を受ける ====================== */
 

@@ -3,7 +3,7 @@
 清澄白河のボタニカルカフェ **le bois** の、閉店後の日報を1つにまとめる仕組み。
 在庫・売上・レジ締めを、スマホで数分で終わる5ステップにしています。
 
-**デモを触る → https://＜ユーザー名＞.github.io/lebois-nippo/**
+**デモを触る → https://matsuoarashi.github.io/lebois/**
 （Pagesを有効にすると、このURLで動きます）
 
 ---
@@ -95,17 +95,48 @@ python3 build.py     # docs/index.html と gas/Index.html を作り直す
 1. このリポジトリをGitHubに置く
 2. **Settings → Pages → Source: Deploy from a branch**
 3. Branch: `main`、フォルダ: `/docs` → Save
-4. 1〜2分待つと `https://＜ユーザー名＞.github.io/lebois-nippo/` で開けます
+4. 1〜2分待つと `https://matsuoarashi.github.io/lebois/` で開けます
 
 デモ版の入力は**その端末のブラウザにだけ**残ります。誰かと共有されることはありません。
 Squareにも繋がっていないので、売上は手で入れる形になります。
 
+### 実データの読み込みリンク
+
+Squareのアクセストークンを設定するまでのあいだ、URLの `#d=` にデータを載せて
+フォームを開くことができます。開くと在庫・釣銭・売上・売れたもの・入荷が入った状態になります。
+
+```
+https://matsuoarashi.github.io/lebois/#d=<base64url(JSON)>
+```
+
+JSONの形:
+
+```json
+{
+  "note": "画面に出すひとこと",
+  "float": 36740,
+  "stock": {"cheese": {"fz": 28, "ch": 9}, "gateau": {"fz": 36, "ch": 5},
+            "chiffon": {"fz": 6, "ch": 0}, "croque": {"fz": 14, "ch": 2}},
+  "sales": 49237,
+  "cash": 3790,
+  "items": {"チーズケーキ": 12, "ガトーショコラ": 3},
+  "arrivals": {"cheese": 3, "gateau": 1}
+}
+```
+
+`stock` は在庫の出発点、`arrivals` は入荷（本／ロール／食）。すべて省略可能です。
+Apps Script版でSquareと繋いだあとは、この仕組みは使わなくなります。
+
 ## 本番として使う
 
-`gas/SETUP.md` の手順どおりに進めてください。既存の発注表スプレッドシートに
+`gas/SETUP.md` の手順どおりに進めてください。既存の製造予定表スプレッドシートに
 シートを足し、Apps Scriptをウェブアプリとして公開します。
 
 Square連携は後回しでも動きます（その間は売上を手入力）。
+
+画面の文言は保存先アダプタが決める `LIVE` フラグで切り替わります。
+`store-gas.js`（本番）は「自動で埋まっています」、`store-local.js`（デモ）は
+「本番では〜」と試用版の注意書きを出します。
 
 ## 分かっている制約
 

@@ -2,6 +2,9 @@
    STORE（本番版）: Google Apps Script 経由でスプレッドシートに読み書きします。
    Code.gs の getState / submitDay / getToday を呼びます。
    ------------------------------------------------------------------ */
+/** 本番版。SquareとスプレッドシートにつながっているのでLIVE */
+var LIVE = true;
+
 var STORE = (function(){
   function run(){ return google.script.run; }
   return {

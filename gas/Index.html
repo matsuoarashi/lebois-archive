@@ -201,6 +201,9 @@
    STORE（本番版）: Google Apps Script 経由でスプレッドシートに読み書きします。
    Code.gs の getState / submitDay / getToday を呼びます。
    ------------------------------------------------------------------ */
+/** 本番版。SquareとスプレッドシートにつながっているのでLIVE */
+var LIVE = true;
+
 var STORE = (function(){
   function run(){ return google.script.run; }
   return {
@@ -484,7 +487,10 @@ var STORE = (function(){
     if(ui.step === 1){
       h += '<p class="kicker">step 1 / 5</p><p class="q">今日のデータです</p>'
          + '<div class="banner sq"><span class="src sq">自動</span><span>'
-         + '<b>本番ではこの画面は開いた時点で埋まっています。</b>売上と売れたものはSquareから、入荷は発注表から。見て次へ進むだけになります。</span></div>'
+         + (LIVE
+             ? '<b>この画面は自動で埋まっています。</b>売上と売れたものはSquareから、入荷は発注表から。見て次へ進んでください。数が違っていたら直せます。'
+             : '<b>本番ではこの画面は開いた時点で埋まっています。</b>売上と売れたものはSquareから、入荷は発注表から。見て次へ進むだけになります。')
+         + '</span></div>'
          + moneyRow('総売上高','', 'sales', form.sales, ['sq','自動'])
          + moneyRow('うち現金','', 'cash', form.cash, ['sq','自動'])
          + '<p class="sgroup">売れたもの<span class="tag sq">自動</span></p>';
@@ -504,8 +510,8 @@ var STORE = (function(){
         h += '<div class="row"><span class="nm" style="flex:1"><input type="text" data-f="nn'+i+'" value="'+esc(form.newNames[i])+'" placeholder="商品名" aria-label="新しい商品名" style="width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--ground);color:var(--ink);font-family:inherit;font-size:12.5px"></span>'
            + stepper('nq'+i, form.newQty[i]) + '</div>';
       });
-      h += '</div></details>'
-         + '<div class="trial"><b>試用版です。</b>Squareとまだ繋がっていないので、今は手で入れてください。</div>';
+      h += '</div></details>';
+      if(!LIVE) h += '<div class="trial"><b>試用版です。</b>Squareとまだ繋がっていないので、今は手で入れてください。</div>';
     }
 
     /* step 2: 在庫を数える */
@@ -717,10 +723,42 @@ var STORE = (function(){
     });
   }
 
-  /* 起動：保存済みの状態を読み、そのあと今日の自動データを取りにいく */
+  /* リンク（#d=...）からデータを読む。Squareトークンを使わずに実データを流し込むための入口 */
+  function readLink(){
+    var h = location.hash || '';
+    if(h.indexOf('#d=') !== 0) return null;
+    try{
+      var b = h.slice(3).replace(/-/g, '+').replace(/_/g, '/');
+      while(b.length % 4) b += '=';
+      return JSON.parse(decodeURIComponent(escape(atob(b))));
+    }catch(e){ return null; }
+  }
+  function applyLink(d){
+    if(d.stock) Object.keys(d.stock).forEach(function(k){
+      if(state.stock[k]) state.stock[k] = {fz:Number(d.stock[k].fz)||0, ch:Number(d.stock[k].ch)||0};
+    });
+    if(typeof d.float === 'number') state.float = d.float;
+    if(typeof d.sales === 'number') form.sales = d.sales;
+    if(typeof d.cash === 'number') form.cash = d.cash;
+    if(d.items) Object.keys(d.items).forEach(function(nm){
+      form.q[nm] = d.items[nm];
+      var known = MAP.some(function(m){ return m.sq === nm; }) || state.items.indexOf(nm) >= 0;
+      if(!known) state.items.push(nm);
+    });
+    if(d.arrivals) Object.keys(d.arrivals).forEach(function(k){
+      if(form.arr[k] !== undefined) form.arr[k] = Number(d.arrivals[k]) || 0;
+    });
+    resetForm();
+    ui.msg = d.note || 'リンクからデータを読み込みました。'; ui.ok = true;
+  }
+
+  /* 起動：保存済みの状態を読み、リンクのデータを重ね、そのあとSquareを取りにいく */
+  var LINK = readLink();
   render();
   if(STORE.load) STORE.load(function(st){
-    if(st && st.stock){ state = st; resetForm(); render(); }
+    if(st && st.stock){ state = st; resetForm(); }
+    if(LINK){ applyLink(LINK); render(); if(!STORE.today) return; }
+    else render();
     if(!STORE.today) return;
     ui.msg = '今日のデータを取得しています…'; ui.ok = true; paint();
     STORE.today(function(d){
