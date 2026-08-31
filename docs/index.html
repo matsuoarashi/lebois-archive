@@ -107,10 +107,11 @@
   .cnt .nm{font-size:14.5px;font-weight:700;}
   .cnt .exp{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--sq);
     font-variant-numeric:tabular-nums;text-align:right;flex:none;}
-  .cnt .in{display:flex;gap:8px;}
+  /* align-items:flex-end で、冷凍側に単位のselectが入っても入力欄の高さが揃う */
+  .cnt .in{display:flex;gap:8px;align-items:flex-end;}
   .cnt .cell{flex:1;display:flex;flex-direction:column;gap:4px;}
   .cnt .cell label{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.06em;
-    color:var(--muted);display:flex;align-items:center;gap:5px;}
+    color:var(--muted);display:flex;align-items:center;gap:5px;min-height:26px;}
   .cnt .cell input{width:100%;padding:9px 6px;border:1px solid var(--line);border-radius:9px;
     background:var(--surface);color:var(--hand);text-align:center;
     font-family:"IBM Plex Mono",monospace;font-size:17px;font-variant-numeric:tabular-nums;
@@ -603,8 +604,8 @@ var STORE = (function(){
          + '<label><input type="radio" name="fmt" value="std"'+(ui.fmt==='std'?' checked':'')+'><span>標準</span></label>'
          + '<label><input type="radio" name="fmt" value="short"'+(ui.fmt==='short'?' checked':'')+'><span>在庫だけ</span></label>'
          + '<label><input type="radio" name="fmt" value="full"'+(ui.fmt==='full'?' checked':'')+'><span>詳しく</span></label>'
-         + '</div><div class="rep"><div class="bub">'+esc(buildReport(ui.fmt))+'</div></div>'
-         + '<div class="future"><b>本番になったら</b>'
+         + '</div><div class="rep"><div class="bub">'+esc(buildReport(ui.fmt))+'</div></div>';
+      if(!LIVE) h += '<div class="future"><b>本番になったら</b>'
          + '<div class="r"><span>1 今日のデータ</span><span style="color:var(--sq)">自動・見るだけ</span></div>'
          + '<div class="r"><span>2 在庫を数える</span><span style="color:var(--hand)">数えて入れる</span></div>'
          + '<div class="r"><span>3 差の確認</span><span style="color:var(--muted)">合っていれば出ない</span></div>'

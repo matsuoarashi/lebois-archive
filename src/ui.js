@@ -360,8 +360,8 @@
          + '<label><input type="radio" name="fmt" value="std"'+(ui.fmt==='std'?' checked':'')+'><span>標準</span></label>'
          + '<label><input type="radio" name="fmt" value="short"'+(ui.fmt==='short'?' checked':'')+'><span>在庫だけ</span></label>'
          + '<label><input type="radio" name="fmt" value="full"'+(ui.fmt==='full'?' checked':'')+'><span>詳しく</span></label>'
-         + '</div><div class="rep"><div class="bub">'+esc(buildReport(ui.fmt))+'</div></div>'
-         + '<div class="future"><b>本番になったら</b>'
+         + '</div><div class="rep"><div class="bub">'+esc(buildReport(ui.fmt))+'</div></div>';
+      if(!LIVE) h += '<div class="future"><b>本番になったら</b>'
          + '<div class="r"><span>1 今日のデータ</span><span style="color:var(--sq)">自動・見るだけ</span></div>'
          + '<div class="r"><span>2 在庫を数える</span><span style="color:var(--hand)">数えて入れる</span></div>'
          + '<div class="r"><span>3 差の確認</span><span style="color:var(--muted)">合っていれば出ない</span></div>'
