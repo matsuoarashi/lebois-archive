@@ -115,6 +115,8 @@ ol.lines li::before{counter-increment:s;content:counter(s);width:24px;height:24p
 .sectionh{display:flex;justify-content:space-between;align-items:baseline;margin:6px 2px 6px}
 .sectionh h2{font-size:14px}
 .sectionh span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sectionh .sh-r{display:flex;align-items:center;gap:8px}
+.sectionh .bulk{padding:4px 10px;font-size:12px;min-height:30px}
 .seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;background:var(--surface-2);padding:4px;border-radius:12px}
 .seg button{border:0;background:none;border-radius:9px;min-height:40px;font-weight:500;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.08)}
@@ -455,19 +457,27 @@ function allItems(list){ return C.checklists[list].sections.flatMap(s => s.items
 function doneMap(list){ const r = S.runs[list]; const m = {}; (r && r.done || []).forEach(d => { m[d.id] = d; }); return m; }
 function progress(list){ const ids = allItems(list), m = doneMap(list); const n = ids.filter(i => m[i]).length; return { n, total: ids.length }; }
 
-async function toggle(list, id){
+async function toggle(list, id){ return setChecks(list, [id], null); }
+
+/* ids の項目を on=true:済み / false:外す / null:反転 にする。bulk はまとめて押したしるし */
+async function setChecks(list, ids, on, bulk){
   const who = await needName(); if(!who) return;
   try{
     const fresh = (await db.getRuns(S.date)).find(r => r.list === list);
     const done = (fresh && fresh.done || []).slice();
-    const i = done.findIndex(d => d.id === id);
-    if(i >= 0) done.splice(i, 1); else done.push({ id, by: who, at: new Date().toISOString() });
-    const total = allItems(list).length;
-    const ids = new Set(done.map(d => d.id));
-    const complete = allItems(list).every(x => ids.has(x));
-    const row = { list, biz_date: S.date, done, updated_by: who, updated_at: new Date().toISOString(), completed_at: complete ? ((fresh && fresh.completed_at) || new Date().toISOString()) : null };
+    const at = new Date().toISOString();
+    ids.forEach(id => {
+      const i = done.findIndex(d => d.id === id);
+      const want = on === null ? i < 0 : on;
+      if(want && i < 0) done.push(bulk ? { id, by: who, at, bulk: true } : { id, by: who, at });
+      if(!want && i >= 0) done.splice(i, 1);
+    });
+    const have = new Set(done.map(d => d.id));
+    const complete = allItems(list).every(x => have.has(x));
+    const row = { list, biz_date: S.date, done, updated_by: who, updated_at: at, completed_at: complete ? ((fresh && fresh.completed_at) || at) : null };
     S.runs[list] = await db.putRun(row) || row;
     if(complete && !(fresh && fresh.completed_at)) toast(C.checklists[list].title + "のチェックが全部終わりました");
+    else if(bulk) toast(ids.length + "項目をまとめて済みにしました");
     render();
   }catch(e){ toast(e.message); }
 }
@@ -531,11 +541,12 @@ function viewCheck(list){
       '<button type="button" data-go="check-open" aria-pressed="' + (list === "open") + '">開店前</button>' +
       '<button type="button" data-go="check-close" aria-pressed="' + (list === "close") + '">閉店作業</button></div>' +
     '<div class="sticky-meter"><div class="row"><span class="label">' + esc(L.title) + "・" + S.date.slice(5).replace("-","/") + '</span><b style="font-variant-numeric:tabular-nums">' + p.n + " / " + p.total + '</b></div><div class="meter"><i style="width:' + (p.n/p.total*100) + '%"></i></div>' +
-      (r && r.completed_at ? '<p class="sub" style="margin-top:4px">' + fmtTime(r.completed_at) + " にすべて完了</p>" : "") + "</div>" +
+      (r && r.completed_at ? '<p class="sub" style="margin-top:4px">' + fmtTime(r.completed_at) + " にすべて完了</p>" : (p.n < p.total ? '<button type="button" class="btn sm ghost bulk-all" data-list="' + list + '" style="margin-top:8px">残り' + (p.total - p.n) + '項目をまとめて済みにする</button>' : "")) + "</div>" +
     L.sections.map(s => {
       const k = s.items.filter(i => m[i[0]]).length;
-      return '<section><div class="sectionh"><h2>' + esc(s.h) + "</h2><span>" + k + "/" + s.items.length + '</span></div><div class="list">' +
-        s.items.map(i => { const d = m[i[0]]; return '<button type="button" class="chk" role="checkbox" aria-checked="' + !!d + '" data-list="' + list + '" data-id="' + i[0] + '"><span class="box" aria-hidden="true">' + (d ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>' : "") + '</span><span class="ct"><span>' + esc(i[1]) + "</span>" + (d ? '<span class="by">' + esc(d.by) + "・" + fmtTime(d.at).split(" ")[1] + "</span>" : "") + "</span></button>"; }).join("") +
+      const left = s.items.filter(i => !m[i[0]]).map(i => i[0]).join(",");
+      return '<section><div class="sectionh"><h2>' + esc(s.h) + '</h2><span class="sh-r">' + (left ? '<button type="button" class="btn sm ghost bulk" data-list="' + list + '" data-ids="' + left + '">まとめて済み</button>' : "") + k + "/" + s.items.length + '</span></div><div class="list">' +
+        s.items.map(i => { const d = m[i[0]]; return '<button type="button" class="chk" role="checkbox" aria-checked="' + !!d + '" data-list="' + list + '" data-id="' + i[0] + '"><span class="box" aria-hidden="true">' + (d ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>' : "") + '</span><span class="ct"><span>' + esc(i[1]) + "</span>" + (d ? '<span class="by">' + esc(d.by) + "・" + fmtTime(d.at).split(" ")[1] + (d.bulk ? "・まとめて" : "") + "</span>" : "") + "</span></button>"; }).join("") +
       "</div></section>";
     }).join("") +
     '<p class="sub">チェックは同じ日に出勤している人どうしで共有されます。押し直すと外せます。</p>' +
@@ -622,6 +633,9 @@ function render(){
 }
 
 $("#view").addEventListener("click", e => {
+  const bk = e.target.closest(".bulk"); if(bk){ setChecks(bk.dataset.list, bk.dataset.ids.split(","), true, true); return; }
+  const ba = e.target.closest(".bulk-all"); if(ba){ const l = ba.dataset.list, m = doneMap(l), left = allItems(l).filter(i => !m[i]);
+    if(left.length && confirm("残りの" + left.length + "項目をまとめて済みにしますか？\n（あとから1つずつ外せます）")) setChecks(l, left, true, true); return; }
   const c = e.target.closest(".chk"); if(c){ toggle(c.dataset.list, c.dataset.id); return; }
   const g = e.target.closest("[data-go]"); if(g){ location.hash = g.dataset.go; return; }
   const rs = e.target.closest("[data-resolve]"); if(rs){ resolveNote(rs.dataset.resolve); }
