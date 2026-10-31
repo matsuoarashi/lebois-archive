@@ -69,6 +69,7 @@ h2{font-size:16px;margin:0}
 .pill{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:2px 9px;border-radius:999px;white-space:nowrap;background:var(--moss-soft);color:var(--moss)}
 .pill.warn{background:var(--warn-soft);color:var(--warn)}
 .pill.q{background:var(--hand-soft);color:var(--hand)}
+.shifts{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}.shifts li{display:flex;align-items:center;gap:10px;font-size:14px}.shifts .tm{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px;min-width:86px}.shifts .nm{font-weight:700}.shifts .gap{color:var(--warn);font-weight:700}.shifts .nt{color:var(--hand)}.dayh{display:flex;align-items:baseline;gap:8px}.dayh b{font-size:15px}.dayh.today b{color:var(--moss)}
 .pill.mute{background:var(--surface-2);color:var(--muted)}
 
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -274,6 +275,57 @@ function seedDemo(){
 }
 if(DEMO && mem.get("seeded", "") !== bizDate()) seedDemo();
 
+/* ---------- シフト（シフト表から。スタッフアプリは表示だけ） ---------- */
+const SH = { days: mem.get("shifts", { days: [] }).days || [], updated: "", error: "", at: 0 };
+function demoShifts(){
+  const names = ["はな", "けい", "ゆう", "そら", "りん"], plan = [
+    [["早番","10:30","14:30",0],["終日","10:30","18:30",1]], [["終日","10:30","18:30",2],["遅番","14:30","18:30",-1]],
+    [["早番","10:30","14:30",3],["遅番","14:30","18:30",0]], [["終日","10:30","18:30",4],["終日","10:30","18:30",1]]];
+  const days = [];
+  for(let i = 0; i < 7; i++){
+    const d = new Date(jstNow().getTime() + i*864e5); if(d.getUTCDay() === 1) continue;
+    const p = plan[i % plan.length];
+    days.push({ date: bizDate(d).replace(/-/g, "/"), items: p.map(x => x[3] < 0 ? { slot: x[0], start: x[1], end: x[2], vacant: true } : { slot: x[0], start: x[1], end: x[2], name: names[(x[3] + i) % names.length] }) });
+  }
+  return days;
+}
+async function loadShifts(force){
+  if(DEMO){ SH.days = demoShifts(); SH.updated = "見本"; return; }
+  if(!CFG.shiftUrl) return;
+  if(!force && Date.now() - SH.at < 10*60e3) return;
+  SH.at = Date.now();
+  try{
+    const r = await fetch(CFG.shiftUrl, { cache: "no-store" });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || "読み込めませんでした");
+    SH.days = j.days || []; SH.updated = j.updated || ""; SH.error = "";
+    mem.set("shifts", { days: SH.days });
+  }catch(e){ SH.error = "シフトを読み込めませんでした（前に読んだ分を表示しています）"; }
+}
+function shiftItems(items){
+  return '<ul class="shifts">' + items.map(it => '<li><span class="pill mute">' + esc(it.slot) + '</span><span class="tm">' + esc(it.start) + "〜" + esc(it.end) + "</span>" +
+    (it.vacant ? '<span class="gap">人が足りません</span>' : it.note ? '<span class="nt">' + esc(it.note) + "</span>" : '<span class="nm">' + esc(it.name) + "</span>") +
+    (it.memo ? '<span class="sub">' + esc(it.memo) + "</span>" : "") + "</li>").join("") + "</ul>";
+}
+function dayLabel(ds){ const d = new Date(ds.replace(/\//g, "-") + "T00:00:00Z"); return (d.getUTCMonth()+1) + "/" + d.getUTCDate() + "（" + WD[d.getUTCDay()] + "）"; }
+function viewShiftCard(){
+  if(!DEMO && !CFG.shiftUrl) return "";
+  const today = bizDate().replace(/-/g, "/"), t = SH.days.find(d => d.date === today);
+  const gaps = SH.days.filter(d => d.items.some(i => i.vacant)).length;
+  const isMon = jstNow().getUTCDay() === 1;
+  return '<section class="card"><div class="row"><h2>今日のシフト</h2><a class="btn sm ghost" href="#shift">今週を見る</a></div>' +
+    (t ? shiftItems(t.items) : '<p class="sub">' + (isMon ? "今日は定休日です。" : "今日のシフトは入っていません。") + "</p>") +
+    (gaps ? '<p style="margin:0"><span class="pill warn">人が足りない日が' + gaps + "日あります</span></p>" : "") +
+    (SH.error ? '<p class="sub">' + esc(SH.error) + "</p>" : "") + "</section>";
+}
+function viewShift(){
+  const today = bizDate().replace(/-/g, "/");
+  return '<div class="stack"><a class="back" href="#home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>ホーム</a><h1>シフト（2週間）</h1>' +
+    (SH.days.length ? SH.days.map(d => '<section class="card sec"><div class="dayh' + (d.date === today ? " today" : "") + '"><b>' + esc(dayLabel(d.date)) + "</b>" + (d.date === today ? '<span class="pill">今日</span>' : "") + (d.items.some(i => i.vacant) ? '<span class="pill warn">人が足りない枠あり</span>' : "") + "</div>" + shiftItems(d.items) + "</section>").join("") : '<p class="empty">表示できるシフトがありません。</p>') +
+    '<p class="sub">シフトの元はシフト登録表です。変更は店長が表で行い、15分ほどでここに出ます。月曜は定休日です。' + (SH.updated && SH.updated !== "見本" ? "（最終取込 " + esc(SH.updated) + "）" : "") + "</p>" +
+    (SH.error ? '<p class="sub">' + esc(SH.error) + "</p>" : "") + "</div>";
+}
+
 /* ---------- 状態 ---------- */
 const S = { runs: { open: null, close: null }, notes: [], date: bizDate(), loaded: false, error: "" };
 
@@ -373,7 +425,7 @@ function viewHome(){
   const shorts = S.notes.filter(n => n.kind === "short" && !n.resolved_at);
   const lastNote = S.notes.find(n => n.kind === "note");
   const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
-  return '<div class="stack">' +
+  return '<div class="stack">' + viewShiftCard() +
     '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
     '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
       (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : '<p class="sub">いま足りないものはありません。</p>') +
@@ -464,6 +516,7 @@ function render(){
   let html, tab;
   if(r.startsWith("check-")){ const l = r.slice(6) === "close" ? "close" : "open"; mem.set("lastList", l); html = viewCheck(l); tab = "check"; }
   else if(r === "notes"){ html = viewNotes(); tab = "notes"; }
+  else if(r === "shift"){ html = viewShift(); tab = "home"; }
   else if(r === "manual"){ html = viewManual(); tab = "manual"; }
   else if(r.startsWith("m-")){ html = viewManualItem(r.slice(2)); tab = "manual"; }
   else { html = viewHome(); tab = "home"; }
@@ -501,6 +554,8 @@ $("#demo").hidden = LIVE;
 updateWho();
 render();
 load();
+loadShifts(true).then(render);
+setInterval(() => { if(!document.hidden) loadShifts().then(render); }, 60000);
 })();
 </script>
 <!--/BODY-->
