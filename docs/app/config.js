@@ -10,6 +10,8 @@ window.LB_CONFIG = {
   anonKey: "sb_publishable_byKaWl2cyzwg1gA-QyfEoQ_mPF9N-1e",
   /* シフト（シフト連携の Apps Script・ウェブアプリURL）。空ならシフトは出さない */
   shiftUrl: "https://script.google.com/macros/s/AKfycbysQ3EqqvZwUHXrlHXeKUbZfw8I9nZ3J0egbD7p3kDu0eOSCQ0aWFleG0iv3fIQhKA/exec",
+  /* 打刻（勤怠取込の Apps Script・「全員」デプロイ）。ログイン確認のうえ freee に打刻を登録する */
+  punchUrl: "https://script.google.com/macros/s/AKfycbycJWjckVLoJAhH7svkzOYbwxZMz1qcGtIgFBPfe9ZdUduyI9XhzoDfmk8oN5JV6FQ/exec",
   /* 日報（Apps Script のウェブアプリ・スタッフ用URL） */
   nippoUrl: "https://script.google.com/macros/s/AKfycbzWHRojz5m8SLr7n5PSXRKKZuY6_5wG6_sjsImIf9iq5im3l_BDeoJe5vnDsnjX9oeN/exec"
 };

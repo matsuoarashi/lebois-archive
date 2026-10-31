@@ -116,6 +116,7 @@ ol.lines li::before{counter-increment:s;content:counter(s);width:24px;height:24p
 .sectionh h2{font-size:14px}
 .sectionh span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .sectionh .sh-r{display:flex;align-items:center;gap:8px}
+.punchrow{display:flex;gap:8px;flex-wrap:wrap}.punchrow .btn{flex:1 1 40%;min-height:52px;font-size:16px}
 .sectionh .bulk{padding:4px 10px;font-size:12px;min-height:30px}
 .seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;background:var(--surface-2);padding:4px;border-radius:12px}
 .seg button{border:0;background:none;border-radius:9px;min-height:40px;font-weight:500;color:var(--muted)}
@@ -298,7 +299,8 @@ function staffNames(){ if(DEMO_NAMES.length) return DEMO_NAMES.slice();
   const out = []; SH.days.forEach(d => d.items.forEach(it => { if(it.name && out.indexOf(it.name) < 0) out.push(it.name); })); return out; }
 
 /* ---------- シフト（シフト表から。スタッフアプリは表示だけ） ---------- */
-const SH = { days: mem.get("shifts", { days: [] }).days || [], updated: "", error: "", at: 0 };
+const SH0 = mem.get("shifts", { days: [] });
+const SH = { days: SH0.days || [], gallery: SH0.gallery || null, mot: SH0.mot || [], updated: "", error: "", at: 0 };
 function demoShifts(real){
   const names = real && real.length >= 5 ? real.slice(0, 5) : ["はな", "けい", "ゆう", "そら", "りん"], plan = [
     [["早番","10:30","14:30",0],["終日","10:30","18:30",1]], [["終日","10:30","18:30",2],["遅番","14:30","18:30",-1]],
@@ -312,7 +314,7 @@ function demoShifts(real){
   return days;
 }
 async function loadShifts(force){
-  if(DEMO && (!CFG.shiftUrl || CFG.supabaseUrl)){ SH.days = demoShifts(DEMO_NAMES); SH.updated = "見本"; return; }
+  if(DEMO && (!CFG.shiftUrl || CFG.supabaseUrl)){ SH.days = demoShifts(DEMO_NAMES); Object.assign(SH, demoAround()); SH.updated = "見本"; return; }
   if(!CFG.shiftUrl) return;
   if(!force && Date.now() - SH.at < 10*60e3) return;
   SH.at = Date.now();
@@ -323,9 +325,98 @@ async function loadShifts(force){
       : await fetch(CFG.shiftUrl, { cache: "no-store" });
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || "読み込めませんでした");
-    SH.days = j.days || []; SH.updated = j.updated || ""; SH.error = "";
-    mem.set("shifts", { days: SH.days });
+    SH.days = j.days || []; SH.gallery = j.gallery || null; SH.mot = j.mot || []; SH.updated = j.updated || ""; SH.error = "";
+    mem.set("shifts", { days: SH.days, gallery: SH.gallery, mot: SH.mot });
   }catch(e){ SH.error = "シフトを読み込めませんでした（前に読んだ分を表示しています）"; }
+}
+
+
+/* ---------- 打刻（アプリ → Apps Script → freee）。試行中は対象の人にだけ出る ---------- */
+const PC = { enabled: false, available: [], clocks: [], msg: "", error: "", busy: false, at: 0 };
+const PUNCH_LABEL = { clock_in: "出勤", break_begin: "休憩に入る", break_end: "休憩から戻る", clock_out: "退勤" };
+async function punchCall(action){
+  if(DEMO){
+    const now = jstNow(), hm = String(now.getUTCHours()).padStart(2,"0") + ":" + String(now.getUTCMinutes()).padStart(2,"0");
+    if(action !== "status"){ PC.clocks.push({ type: action, label: PUNCH_LABEL[action], at: hm }); PC.msg = PUNCH_LABEL[action] + "を記録しました（" + hm + "・見本）"; }
+    const last = PC.clocks.length ? PC.clocks[PC.clocks.length-1].type : "";
+    PC.enabled = true;
+    PC.available = !last || last === "clock_out" ? (last ? [] : ["clock_in"]) : last === "break_begin" ? ["break_end"] : ["break_begin", "clock_out"];
+    return;
+  }
+  if(!CFG.punchUrl || !AUTH.token) return;
+  const r = await fetch(CFG.punchUrl, { method: "POST", body: JSON.stringify({ token: AUTH.token, action }) });
+  const j = await r.json();
+  if(j.error === "login_required"){ logout(); return; }
+  PC.enabled = !!j.enabled; PC.error = j.ok ? "" : (j.error || "");
+  if(j.ok){ PC.available = j.available || []; PC.clocks = j.clocks || []; PC.msg = j.msg || ""; }
+}
+async function loadPunch(force){
+  if(!force && Date.now() - PC.at < 2*60e3) return;
+  PC.at = Date.now();
+  try{ await punchCall("status"); }catch(e){ PC.error = "打刻の状態を読み込めませんでした"; }
+}
+async function doPunch(action){
+  if(PC.busy) return;
+  if(action === "clock_out" && !confirm("退勤を記録しますか？")) return;
+  PC.busy = true; PC.msg = ""; render();
+  try{ await punchCall(action); if(PC.msg) toast(PC.msg); }
+  catch(e){ PC.error = "通信できませんでした。もう一度押すか、freee のアプリで打刻してください"; }
+  PC.busy = false; PC.at = Date.now(); render();
+}
+function viewPunch(){
+  if(!PC.enabled) return "";
+  const done = PC.clocks.map(c => '<span class="pill mute">' + esc(c.label) + " " + esc(c.at) + "</span>").join(" ");
+  const btns = PC.available.map(a => '<button type="button" class="btn' + (a === "clock_out" || a === "break_begin" ? " ghost" : "") + ' punch" data-a="' + a + '"' + (PC.busy ? " disabled" : "") + ">" + esc(PUNCH_LABEL[a] || a) + "</button>").join("");
+  return '<section class="card"><div class="row"><h2>打刻</h2><span class="pill mute">freee に記録</span></div>' +
+    (done ? '<p style="margin:0 0 10px;display:flex;gap:6px;flex-wrap:wrap">' + done + "</p>" : '<p class="sub" style="margin:0 0 10px">今日はまだ打刻していません。</p>') +
+    (btns ? '<div class="punchrow">' + btns + "</div>" : '<p class="sub" style="margin:0">今日の打刻は終わっています。おつかれさまでした。</p>') +
+    (PC.error ? '<p class="sub" style="margin:10px 0 0;color:var(--warn)">' + esc(PC.error) + "</p>" : "") +
+    '<p class="sub" style="margin:10px 0 0">押し間違えたときは店長に伝えてください（freee で直します）。</p></section>';
+}
+
+/* ---------- ギャラリー Klyuch と 東京都現代美術館（シフト連携の Apps Script から一緒に届く） ---------- */
+function ymdS(d){ return bizDate(d).replace(/-/g, "/"); }
+function addD(ds, n){ return ymdS(new Date(new Date(ds.replace(/\//g, "-") + "T00:00:00Z").getTime() + n*864e5)); }
+function mdS(ds){ const a = ds.split("/"); return (+a[1]) + "/" + (+a[2]); }
+function demoAround(){
+  const t = ymdS(jstNow());
+  return { gallery: { items: [
+      { name: "見本：ガラスと写真の二人展", venue: "ギャラリー", start: addD(t, -2), end: addD(t, 1), moveIn: addD(t, -3) },
+      { name: "見本：版画の個展", venue: "ギャラリー", start: addD(t, 4), end: addD(t, 8), moveIn: addD(t, 3) }] },
+    mot: [{ title: "見本：開催中の企画展", start: addD(t, -40), end: addD(t, 3) }, { title: "見本：次の企画展", start: addD(t, 20), end: addD(t, 110) }] };
+}
+function galleryTag(g, d){
+  if(g.moveIn === d) return '<span class="pill q">搬入</span>';
+  if(g.start === d && g.end === d) return '<span class="pill">1日だけ</span>';
+  if(g.start === d) return '<span class="pill">初日</span>';
+  if(g.end === d) return '<span class="pill warn">最終日・撤収</span>';
+  return "";
+}
+function viewAround(){
+  const t = ymdS(jstNow()), wk = addD(t, 7);
+  const G = SH.gallery, items = (G && G.items) || [];
+  const on = items.filter(g => (g.moveIn || g.start) <= t && g.end >= t);
+  const next = items.filter(g => (g.moveIn || g.start) > t && (g.moveIn || g.start) <= wk);
+  if(!G && !(SH.mot || []).length) return "";  // まだつながっていない間は出さない
+  let h = '<section class="card"><div class="row"><h2>ギャラリー Klyuch</h2><span class="pill mute">中2階</span></div>';
+  if(G && G.error) h += '<p class="sub" style="margin:0">' + esc(G.error) + "</p>";
+  else if(!G) h += '<p class="sub" style="margin:0">ギャラリーの予定はまだつながっていません。</p>';
+  else {
+    h += on.length ? '<ul class="lines">' + on.map(g => '<li><div class="body"><span><b>' + esc(g.name) + "</b> " + galleryTag(g, t) + '</span><span class="sub">' + (g.moveIn === t ? "今日は搬入・設営。会期 " : "会期 ") + mdS(g.start) + "〜" + mdS(g.end) + (g.venue && g.venue !== "ギャラリー" ? "・" + esc(g.venue) : "") + "</span></div></li>").join("") + "</ul>"
+      : '<p class="sub" style="margin:0">今日のギャラリーは展示がありません。</p>';
+    if(next.length) h += '<p class="sub" style="margin:8px 0 0">この先1週間：' + next.map(g => esc(g.name) + "（" + (g.moveIn ? "搬入 " + mdS(g.moveIn) + "、" : "") + mdS(g.start) + "〜" + mdS(g.end) + "）").join("、") + "</p>";
+  }
+  h += '<p class="sub" style="margin:8px 0 0">撮影や作家さんごとのお願いはLINEで届きます。</p></section>';
+  const mot = (SH.mot || []).filter(m => m.end >= t);
+  if(mot.length){
+    const now = mot.filter(m => m.start <= t), soon = mot.filter(m => m.start > t).slice(0, 2);
+    const left = m => { const n = Math.round((new Date(m.end.replace(/\//g,"-")) - new Date(t.replace(/\//g,"-"))) / 864e5); return n === 0 ? '<span class="pill warn">最終日</span>' : n <= 7 ? '<span class="pill warn">あと' + n + "日</span>" : ""; };
+    h += '<section class="card"><div class="row"><h2>東京都現代美術館</h2><span class="pill mute">月曜休館</span></div>' +
+      (now.length ? '<ul class="lines">' + now.map(m => '<li><div class="body"><span>' + esc(m.title) + " " + (m.start === t ? '<span class="pill">初日</span>' : left(m)) + '</span><span class="sub">' + mdS(m.start) + "〜" + mdS(m.end) + "</span></div></li>").join("") + "</ul>" : '<p class="sub" style="margin:0">いまは企画展の入れ替え期間です。</p>') +
+      (soon.length ? '<p class="sub" style="margin:8px 0 0">次：' + soon.map(m => esc(m.title) + "（" + mdS(m.start) + "〜）").join("、") + "</p>" : "") +
+      '<p class="sub" style="margin:8px 0 0">初日・最終日と週末は美術館帰りのお客さまが増えます。</p></section>';
+  }
+  return h;
 }
 function shiftItems(items){
   return '<ul class="shifts">' + items.map(it => '<li><span class="pill mute">' + esc(it.slot) + '</span><span class="tm">' + esc(it.start) + "〜" + esc(it.end) + "</span>" +
@@ -370,7 +461,7 @@ async function pressKey(k){
     mem.set("token", AUTH.token); mem.set("authName", AUTH.name); mem.set("authRole", AUTH.role); mem.set("authId", AUTH.id);
     Object.assign(LG, { pick: null, pin: "", first: "", step: "pick", msg: "", busy: false, list: null });
     toast(row.first_time ? "番号を決めました。次からはこの番号で入れます" : "おかえりなさい、" + AUTH.name + " さん");
-    updateWho(); await load(); loadShifts(true).then(render);
+    updateWho(); await load(); loadShifts(true).then(render); loadPunch(true).then(render);
   }catch(e){ LG.pin = ""; LG.msg = e.message; LG.busy = false; render(); }
 }
 document.addEventListener("click", e => {
@@ -518,7 +609,7 @@ function viewHome(){
   const shorts = S.notes.filter(n => n.kind === "short" && !n.resolved_at);
   const lastNote = S.notes.find(n => n.kind === "note");
   const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
-  return '<div class="stack">' + viewMyShift() + viewShiftCard() +
+  return '<div class="stack">' + viewPunch() + viewMyShift() + viewShiftCard() + viewAround() +
     '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
     '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
       (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : '<p class="sub">いま足りないものはありません。</p>') +
@@ -633,6 +724,7 @@ function render(){
 }
 
 $("#view").addEventListener("click", e => {
+  const pb = e.target.closest(".punch"); if(pb){ doPunch(pb.dataset.a); return; }
   const bk = e.target.closest(".bulk"); if(bk){ setChecks(bk.dataset.list, bk.dataset.ids.split(","), true, true); return; }
   const ba = e.target.closest(".bulk-all"); if(ba){ const l = ba.dataset.list, m = doneMap(l), left = allItems(l).filter(i => !m[i]);
     if(left.length && confirm("残りの" + left.length + "項目をまとめて済みにしますか？\n（あとから1つずつ外せます）")) setChecks(l, left, true, true); return; }
@@ -659,11 +751,13 @@ render();
 if(DEMO){
   (CFG.supabaseUrl ? rpc("lb_staff_list", {}).then(l => { DEMO_NAMES = (l || []).map(x => x.name); }).catch(() => {}) : Promise.resolve())
   .then(() => loadShifts(true)).then(() => { const n = staffNames(); if(mem.get("seeded", "") !== bizDate() + (n.length ? "|real" : "")) seedDemo(n); return load(); }).then(render);
+  loadPunch(true).then(render);
 }else if(!LIVE || AUTH.token){
   load();
   loadShifts(true).then(render);
+  loadPunch(true).then(render);
 }
-setInterval(() => { if(!document.hidden) loadShifts().then(render); }, 60000);
+setInterval(() => { if(!document.hidden){ loadShifts().then(render); loadPunch().then(render); } }, 60000);
 })();
 </script>
 <!--/BODY-->
