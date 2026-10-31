@@ -374,7 +374,7 @@ function viewPunch(){
     '<p class="sub" style="margin:10px 0 0">押し間違えたときは店長に伝えてください（freee で直します）。</p></section>';
 }
 
-/* ---------- ギャラリー Klyuch と 東京都現代美術館（シフト連携の Apps Script から一緒に届く） ---------- */
+/* ---------- gallery.klyuch と 東京都現代美術館（シフト連携の Apps Script から一緒に届く） ---------- */
 function ymdS(d){ return bizDate(d).replace(/-/g, "/"); }
 function addD(ds, n){ return ymdS(new Date(new Date(ds.replace(/\//g, "-") + "T00:00:00Z").getTime() + n*864e5)); }
 function mdS(ds){ const a = ds.split("/"); return (+a[1]) + "/" + (+a[2]); }
@@ -399,7 +399,7 @@ function viewAround(){
   const on = items.filter(g => (g.moveIn || g.start) <= t && g.end >= t);
   const next = items.filter(g => (g.moveIn || g.start) > t && (g.moveIn || g.start) <= wk);
   if(!G && !(SH.mot || []).length) return "";  // まだつながっていない間は出さない
-  let h = '<section class="card"><div class="row"><h2>ギャラリー Klyuch</h2><span class="pill mute">中2階</span></div>';
+  let h = '<section class="card"><div class="row"><h2>gallery.klyuch</h2><span class="pill mute">中2階</span></div>';
   if(G && G.error) h += '<p class="sub" style="margin:0">' + esc(G.error) + "</p>";
   else if(!G) h += '<p class="sub" style="margin:0">ギャラリーの予定はまだつながっていません。</p>';
   else {
