@@ -183,7 +183,8 @@ input[type=text]{width:100%;min-height:46px;border:1px solid var(--line);border-
 "use strict";
 const C = window.LB_CONTENT, CFG = window.LB_CONFIG || {};
 const STORE = CFG.store || "lebois";
-const LIVE = !!(CFG.supabaseUrl && CFG.anonKey);
+const DEMO = /[?&]demo\b/.test(location.search);
+const LIVE = !DEMO && !!(CFG.supabaseUrl && CFG.anonKey);
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const WD = ["日","月","火","水","木","金","土"];
@@ -195,8 +196,8 @@ function fmtTime(iso){ const d = new Date(new Date(iso).getTime() + 9*3600e3); r
 
 /* ---------- 端末に覚えるもの ---------- */
 const mem = {
-  get(k, d){ try{ const v = localStorage.getItem("lb_"+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
-  set(k, v){ try{ localStorage.setItem("lb_"+k, JSON.stringify(v)); }catch(e){} }
+  get(k, d){ try{ const v = localStorage.getItem((DEMO ? "lbdemo_" : "lb_")+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem((DEMO ? "lbdemo_" : "lb_")+k, JSON.stringify(v)); }catch(e){} }
 };
 
 /* ---------- 保存先 ---------- */
@@ -245,6 +246,31 @@ const local = {
   async resolve(id, by){ const all = mem.get("notes", []); const n = all.find(x => x.id === id); if(n){ n.resolved_at = new Date().toISOString(); n.resolved_by = by; } mem.set("notes", all); }
 };
 const db = LIVE ? remote : local;
+
+/* ---------- 見本データ（?demo=1 で開いたときだけ） ---------- */
+function seedDemo(){
+  const today = bizDate(), y = bizDate(new Date(jstNow().getTime() - 864e5));
+  const at = (date, hm) => new Date(date + "T" + hm + ":00+09:00").toISOString();
+  const ids = list => C.checklists[list].sections.flatMap(s => s.items.map(i => i[0]));
+  const openIds = ids("open"), closeIds = ids("close");
+  const openDone = openIds.slice(0, openIds.length - 4).map((id, i) => ({ id, by: i % 3 === 2 ? "けい" : "はな", at: at(today, "09:" + String(30 + i).padStart(2,"0")) }));
+  const closeDone = closeIds.map((id, i) => ({ id, by: i % 2 ? "ゆう" : "けい", at: at(y, (i < 20 ? "18:" + String(10 + i*2).padStart(2,"0") : "19:" + String((i-20)*2).padStart(2,"0"))) }));
+  mem.set("runs", [
+    { list: "close", biz_date: y, done: closeDone, updated_by: "ゆう", updated_at: at(y, "19:20"), completed_at: at(y, "19:20") },
+    { list: "open", biz_date: today, done: openDone, updated_by: "はな", updated_at: at(today, "09:58"), completed_at: null }
+  ]);
+  mem.set("notes", [
+    { id: "d1", kind: "short", body: "オーツミルク 残り1本", staff: "ゆう", created_at: at(y, "18:40"), resolved_at: null },
+    { id: "d2", kind: "short", body: "テイクアウトカップ（S）残り少なめ", staff: "けい", created_at: at(y, "15:05"), resolved_at: at(today, "09:45"), resolved_by: "はな" },
+    { id: "d3", kind: "short", body: "ペーパーナプキン", staff: "はな", created_at: at(today, "09:50"), resolved_at: null },
+    { id: "d4", kind: "note", body: "テラスのクッションを1つ洗濯に出しています。戻るまで階段下の予備を使ってください。", staff: "ゆう", created_at: at(y, "19:15"), resolved_at: null },
+    { id: "d5", kind: "note", body: "チーズケーキ、今日は週末なので2本解凍済みです。", staff: "けい", created_at: at(y, "19:05"), resolved_at: null },
+    { id: "d6", kind: "note", body: "14時にお花の納品予定。受け取りをお願いします。", staff: "はな", created_at: at(today, "09:55"), resolved_at: null }
+  ]);
+  mem.set("names", ["はな", "けい", "ゆう"]);
+  mem.set("seeded", today);
+}
+if(DEMO && mem.get("seeded", "") !== bizDate()) seedDemo();
 
 /* ---------- 状態 ---------- */
 const S = { runs: { open: null, close: null }, notes: [], date: bizDate(), loaded: false, error: "" };
@@ -447,6 +473,10 @@ window.addEventListener("hashchange", () => { render(); window.scrollTo(0,0); })
 document.addEventListener("visibilitychange", () => { if(!document.hidden) load(); });
 setInterval(() => { if(!document.hidden && !(document.activeElement || document.body).matches("input,textarea")) load(); }, 30000);
 
+if(DEMO){
+  $("#demo").innerHTML = '見本データ入りの確認用画面です。押したりメモしたりしても本番には残りません。 <button type="button" id="demoReset" style="margin-left:4px;border:0;background:none;color:inherit;text-decoration:underline;font:inherit;cursor:pointer;padding:0">見本を最初に戻す</button>';
+  $("#demoReset").addEventListener("click", () => { seedDemo(); load(); toast("見本データを最初の状態に戻しました"); });
+}
 $("#demo").hidden = LIVE;
 updateWho();
 render();
