@@ -392,3 +392,26 @@ window.LB_CONTENT = {
     }
   }
 };
+
+/* 紙のマニュアル（黄色いファイル）の写真。2026-10-31 撮影。
+ * img/ のファイルを同じ名前で上書きすれば差し替えられる。増やすときはここに足す。 */
+window.LB_CONTENT.photos = {
+  layout: [
+    { src: "img/layout-open.jpg",  cap: "キッチン配置図（営業中）" },
+    { src: "img/layout-close.jpg", cap: "キッチン配置図（閉店時）" },
+    { src: "img/pantry-close.jpg", cap: "パントリー・ギャラリー配置図（閉店時）と閉店時チェック" }
+  ],
+  expiry:  [ { src: "img/expiry.jpg",  cap: "提供期限（手書き）" } ],
+  cheese:  [ { src: "img/cheese.jpg",  cap: "チーズケーキ 提供方法" } ],
+  gateau:  [ { src: "img/gateau.jpg",  cap: "ガトーショコラ 提供方法" } ],
+  croche:  [ { src: "img/croche-1.jpg", cap: "クロッシュ 制作手順 1〜6" }, { src: "img/croche-2.jpg", cap: "クロッシュ 制作手順 7〜10（8と9の矢印＝ハム→葉物の順に入れ替え）" } ],
+  croque:  [ { src: "img/croque.jpg",  cap: "クロックムッシュ 提供方法" } ],
+  pudding: [ { src: "img/pudding.jpg", cap: "プリン 提供方法" } ],
+  yakuzen: [ { src: "img/yakuzen.jpg", cap: "薬膳茶 作り方" } ],
+  caramel: [ { src: "img/ginger-caramel.jpg", cap: "ジンジャーエール／キャラメルラテ" } ],
+  ginger:  [ { src: "img/ginger-caramel.jpg", cap: "ジンジャーエール／キャラメルラテ" } ],
+  orange:  [ { src: "img/orange.jpg",  cap: "オレンジシロップ煮 作り方（手書き）" } ],
+  picnic:  [ { src: "img/picnic.jpg",  cap: "ピクニックセット運用マニュアル" } ],
+  open:    [ { src: "img/open-1.jpg", cap: "開店前準備マニュアル 1/2" }, { src: "img/open-2.jpg", cap: "開店前準備マニュアル 2/2" } ],
+  close:   [ { src: "img/close-1.jpg", cap: "閉店作業マニュアル" }, { src: "img/pantry-close.jpg", cap: "閉店時チェック（パントリー配置図の上）" } ]
+};

@@ -45,6 +45,7 @@ button{cursor:pointer}
 .brand{display:flex;flex-direction:column;line-height:1.3;min-width:0}
 .brand b{font-size:17px;letter-spacing:.02em}
 .brand span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.photos{display:grid;gap:12px}.photos a{display:block;text-decoration:none;color:inherit}.photos img{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--line);background:var(--line-soft)}.photos figure{margin:0}.photos figcaption{font-size:12.5px;color:var(--muted);margin-top:6px}
 .who{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-size:13px;min-height:36px;max-width:50%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .demo{margin:0 0 12px;padding:8px 12px;border-radius:10px;background:var(--hand-soft);color:var(--hand);font-size:12.5px}
 
@@ -393,6 +394,7 @@ function viewCheck(list){
       "</div></section>";
     }).join("") +
     '<p class="sub">チェックは同じ日に出勤している人どうしで共有されます。押し直すと外せます。</p>' +
+    '<details style="margin-top:4px"><summary class="sub" style="cursor:pointer;padding:4px 2px">紙のマニュアルを見る</summary><div style="margin-top:8px">' + photosHtml(list, list === "open" ? "開店前準備マニュアル（紙）" : "閉店作業マニュアル（紙）") + "</div></details>" +
   "</div>";
 }
 
@@ -412,6 +414,12 @@ function viewNotes(){
   "</div>";
 }
 
+function photosHtml(key, title){
+  const list = (C.photos || {})[key]; if(!list || !list.length) return "";
+  return '<section class="card sec"><h2>' + esc(title || "紙のマニュアル（写真）") + '</h2><p class="sub" style="margin:0 0 10px">タップすると大きく開きます。</p><div class="photos">' +
+    list.map(p => '<figure><a href="' + esc(p.src) + '" target="_blank" rel="noopener"><img src="' + esc(p.src) + '" alt="' + esc(p.cap) + '" loading="lazy"></a><figcaption>' + esc(p.cap) + "</figcaption></figure>").join("") + "</div></section>";
+}
+
 function viewManual(){
   const groups = {};
   C.manual.forEach(m => { (groups[m.group] = groups[m.group] || []).push(m); });
@@ -426,14 +434,15 @@ function viewManual(){
 
 function viewManualItem(id){
   const back = '<a class="back" href="#manual"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>マニュアル</a>';
-  if(id === "expiry") return '<div class="stack">' + back + "<h1>提供期限</h1>" + '<div class="card"><table><tbody>' + C.expiry.map(e => "<tr><td>" + esc(e.item) + '</td><td class="n" style="white-space:normal;text-align:right">' + esc(e.rule) + "</td></tr>").join("") + '</tbody></table></div><div class="must">' + esc(C.expiryNote) + "</div></div>";
-  if(id === "layout") return '<div class="stack">' + back + '<h1>キッチンの決まり</h1><p class="sub">黄色いファイルの配置図より。</p>' + C.layout.map(l => '<section class="card sec"><h2>' + esc(l.t) + "</h2>" + linesHtml([l.d]) + "</section>").join("") + "</div>";
+  if(id === "expiry") return '<div class="stack">' + back + "<h1>提供期限</h1>" + '<div class="card"><table><tbody>' + C.expiry.map(e => "<tr><td>" + esc(e.item) + '</td><td class="n" style="white-space:normal;text-align:right">' + esc(e.rule) + "</td></tr>").join("") + '</tbody></table></div><div class="must">' + esc(C.expiryNote) + "</div>" + photosHtml("expiry") + "</div>";
+  if(id === "layout") return '<div class="stack">' + back + '<h1>キッチンの決まり</h1><p class="sub">黄色いファイルの配置図より。</p>' + photosHtml("layout", "配置図") + C.layout.map(l => '<section class="card sec"><h2>' + esc(l.t) + "</h2>" + linesHtml([l.d]) + "</section>").join("") + "</div>";
   const m = C.manual.find(x => x.id === id); if(!m) return viewManual();
   return '<div class="stack">' + back +
     "<div><h1>" + esc(m.title) + "</h1>" + (m.sub ? '<p class="sub">' + esc(m.sub) + "</p>" : "") + (m.flag ? '<p style="margin:6px 0 0"><span class="pill warn">' + esc(m.flag) + "</span></p>" : "") + "</div>" +
     (m.lead ? '<p style="margin:0">' + esc(m.lead) + "</p>" : "") +
     (m.must ? '<div class="must"><small>厳守</small>' + esc(m.must) + "</div>" : "") +
     m.sections.map(s => '<section class="card sec"><h2>' + esc(s.h) + "</h2>" + linesHtml(s.lines, s.ordered) + "</section>").join("") +
+    photosHtml(m.id) +
   "</div>";
 }
 
