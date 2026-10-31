@@ -417,7 +417,7 @@ function viewNotes(){
 function photosHtml(key, title){
   const list = (C.photos || {})[key]; if(!list || !list.length) return "";
   return '<section class="card sec"><h2>' + esc(title || "紙のマニュアル（写真）") + '</h2><p class="sub" style="margin:0 0 10px">タップすると大きく開きます。</p><div class="photos">' +
-    list.map(p => '<figure><a href="' + esc(p.src) + '" target="_blank" rel="noopener"><img src="' + esc(p.src) + '" alt="' + esc(p.cap) + '" loading="lazy"></a><figcaption>' + esc(p.cap) + "</figcaption></figure>").join("") + "</div></section>";
+    list.map(p => '<figure><a href="' + esc(p.src) + '" target="_blank" rel="noopener"><img src="' + esc(p.src) + '" alt="' + esc(p.cap) + '" decoding="async"></a><figcaption>' + esc(p.cap) + "</figcaption></figure>").join("") + "</div></section>";
 }
 
 function viewManual(){
