@@ -123,8 +123,34 @@ function slotTimes_(src) {
   return out;
 }
 
-/* ---------- スタッフアプリへの返事 ---------- */
-function doGet(e) {
+/* ---------- スタッフアプリへの返事 ----------
+ * スタッフアプリはログイン後、POST で {token} を送ってくる。
+ * token が本物かは Supabase（lb_whoami）に聞く。ログインしていない人にはシフトを返さない。
+ * 公開用の鍵（publishable key）はページにも載る公開の値なので、ここに書いてよい */
+const SB_URL = 'https://xqmdgvgiagxsysuzwfhi.supabase.co';
+const SB_KEY = 'sb_publishable_ixl6WvsJIE6HEzjFuRxKyw_2Lqw__sa';
+
+function doGet(e) { return json_({ ok: false, error: 'login_required' }); }
+
+function doPost(e) {
+  let token = '';
+  try { token = String(JSON.parse(e.postData.contents || '{}').token || ''); } catch (err) {}
+  if (!/^[0-9a-f-]{36}$/.test(token)) return json_({ ok: false, error: 'login_required' });
+  const cache = CacheService.getScriptCache();
+  if (!cache.get('tok:' + token)) {
+    const r = UrlFetchApp.fetch(SB_URL + '/rest/v1/rpc/lb_whoami', {
+      method: 'post', contentType: 'application/json', headers: { apikey: SB_KEY },
+      payload: JSON.stringify({ p_token: token }), muteHttpExceptions: true
+    });
+    if (r.getResponseCode() !== 200) return json_({ ok: false, error: 'login_required' });
+    cache.put('tok:' + token, '1', 600); // 10分は聞き直さない
+  }
+  return json_(payload_());
+}
+
+function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+
+function payload_() {
   const out = { ok: true, updated: '', days: [] };
   try {
     const store = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('STORE_ID'));
@@ -153,7 +179,7 @@ function doGet(e) {
   } catch (err) {
     out.ok = false; out.error = String(err && err.message || err);
   }
-  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+  return out;
 }
 
 /* 表示名：「表示名」シートにあればそれ。なければ姓を除いた推定（空白の後ろ／カタカナの後ろ／先頭2文字を除く） */
@@ -191,4 +217,4 @@ function hm_(v) {
 }
 
 /* エディタから動作確認用：今日から14日分をログに出す */
-function showToday() { Logger.log(doGet().getContent()); }
+function showToday() { Logger.log(JSON.stringify(payload_())); }
