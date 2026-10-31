@@ -262,8 +262,12 @@ grant execute on function lb_staff_list(text), lb_login(uuid, text), lb_logout(u
 -- 最初のスタッフ（シフト連携の「表示名」と同じ。足すときは同じ形で1行ずつ）
 insert into lb_staff (name, sort) values
   ('柚那',10),('愛',20),('由希子',30),('葵',40),('亜妃',50),('琉月',60),('弘樹',70),('菜々',80),
-  ('初凪',90),('花連',100),('絵梨',110),('香織',120),('智尋',130),('和実',140),('唯',150)
+  ('初凪',90),('花連',100),('絵梨',110),('香織',120),('智尋',130),('和実',140),('唯',150),
+  ('佳奈',160),('新史',170)
 on conflict (store_id, name) do nothing;
+
+-- 管理者（番号の消去・習熟度一覧）：岡田葵・古川佳奈・松尾新史
+update lb_staff set role = 'manager' where store_id = 'lebois' and name in ('葵','佳奈','新史');
 
 -- シフト押し込み用の合鍵（初回だけランダムに作る）
 insert into lb_secrets (name, value) values ('shift_push', encode(extensions.gen_random_bytes(24), 'hex'))
