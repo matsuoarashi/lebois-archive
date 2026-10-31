@@ -161,6 +161,11 @@ input[type=text]{width:100%;min-height:46px;border:1px solid var(--line);border-
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--ground);padding:8px 16px;border-radius:10px;font-size:13px;z-index:40;max-width:calc(100% - 32px)}
 .err{color:var(--warn);font-size:13px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 6px}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
+.chip.on{background:var(--moss);color:#fff;border-color:var(--moss);opacity:.85}
+.card.warn{border-color:var(--warn)}
+.lines li .body{flex:1}.lines li>.btn{flex:none;align-self:center}
 </style>
 <!--/APP-->
 </head>
@@ -577,12 +582,54 @@ async function setChecks(list, ids, on, bulk){
 /* ---------- 引き継ぎ ---------- */
 async function addNote(kind, body){
   const who = await needName(); if(!who) return false;
-  try{ await db.addNote({ kind, body, staff: who }); await load(); toast(kind === "short" ? "不足リストに追加しました" : "引き継ぎを残しました"); return true; }
+  try{ await db.addNote({ kind, body, staff: who }); await load(); toast({ short: "不足リストに追加しました", task: "明日の人への依頼に入れました", cash: "両替の依頼を出しました" }[kind] || "引き継ぎを残しました"); return true; }
   catch(e){ toast(e.message); return false; }
 }
 async function resolveNote(id){
   const who = await needName(); if(!who) return;
-  try{ await db.resolve(id, who); await load(); toast("解決済みにしました"); }catch(e){ toast(e.message); }
+  try{ const n = S.notes.find(x => x.id === id); await db.resolve(id, who); await load(); toast(n && n.kind === "task" ? "ありがとうございます" : n && n.kind === "cash" ? "両替を用意済みにしました" : "解決済みにしました"); }catch(e){ toast(e.message); }
+}
+
+/* ---------- 明日の人へ・両替（引き継ぎと同じ lb_notes に kind を分けて入れる） ---------- */
+const TASK_PRESETS = ["プリンを作る","チーズケーキをカット","ガトーショコラをカット","シフォンをカット","クロックムッシュを解凍","クレソン・ルッコラを洗う","コーヒー豆をミルにかける","ジンジャー用のオレンジをカット"];
+const CASH_PRESETS = ["100円玉","50円玉","500円玉","千円札","1万円札"];
+const VIEWER = () => LIVE && AUTH.role === "viewer";
+function openOf(kind){ return S.notes.filter(n => n.kind === kind && !n.resolved_at); }
+function chips(kind, list, attr){
+  const open = openOf(kind).map(n => n.body);
+  return '<div class="chips">' + list.map(t => '<button type="button" class="chip' + (open.indexOf(t) >= 0 ? " on" : "") + '" data-' + attr + '="' + esc(t) + '"' + (open.indexOf(t) >= 0 ? ' aria-pressed="true" disabled' : "") + '>' + esc(t) + "</button>").join("") + "</div>";
+}
+function taskList(kind, doneLabel){
+  const open = openOf(kind);
+  return open.length ? '<ul class="lines">' + open.map(n => '<li><div class="body"><span>' + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + '</span></div><button type="button" class="btn sm ghost" data-resolve="' + esc(n.id) + '">' + doneLabel + "</button></li>").join("") + "</ul>" : "";
+}
+function handoverText(){
+  const t = openOf("task"), c = openOf("cash");
+  let L = [];
+  if(t.length) L.push("明日の人へ：" + t.map(n => "・" + n.body).join(" "));
+  if(c.length) L.push("両替が必要：" + c.map(n => n.body).join("・"));
+  return L.join("\n");
+}
+/** 閉店作業の画面：明日の人への依頼と両替 */
+function viewHandover(){
+  return '<section class="card"><div class="row"><h2>明日の人へ</h2><span class="pill mute">翌日の開店前チェックの先頭に出ます</span></div>' +
+    chips("task", TASK_PRESETS, "task") + taskList("task", "取り消す") +
+    '<form id="taskForm" class="row" style="gap:8px;margin-top:8px"><input type="text" id="taskIn" maxlength="200" placeholder="そのほか（例：ハムを買う）" style="flex:1"><button class="btn sm" type="submit">追加</button></form></section>' +
+    '<section class="card"><div class="row"><h2>両替が必要</h2><span class="pill mute">足りない小銭・お札</span></div>' +
+    chips("cash", CASH_PRESETS, "cash") + taskList("cash", "用意した") +
+    (handoverText() ? '<button type="button" class="btn sm ghost" id="copyHand" style="margin-top:8px">LINEに貼る文をコピー</button>' : "") + "</section>";
+}
+/** 開店前・ホーム：前日からの依頼と両替の呼びかけ */
+function viewRequests(forHome){
+  const t = openOf("task"), c = openOf("cash");
+  if(!t.length && !c.length) return "";
+  let h = "";
+  if(t.length) h += '<section class="card"><div class="row"><h2>' + (forHome ? "今日の依頼" : "前日からの依頼") + '</h2><span class="pill">' + t.length + "件</span></div>" +
+    '<div class="list">' + t.map(n => '<button type="button" class="chk" role="checkbox" aria-checked="false" data-resolve="' + esc(n.id) + '"><span class="box" aria-hidden="true"></span><span class="ct"><span>' + esc(n.body) + '</span><span class="by">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></span></button>").join("") + "</div>" +
+    '<p class="sub" style="margin:6px 0 0">やったら押してください。押すと消えます。</p></section>';
+  if(c.length) h += '<section class="card warn"><div class="row"><h2>両替が必要</h2><span class="pill warn">' + c.map(n => esc(n.body)).join("・") + "</span></div>" +
+    '<p class="sub" style="margin:0 0 8px">岡田さん・佳奈さん・新史さんのどなたかが用意します。</p>' + taskList("cash", "用意した") + "</section>";
+  return h;
 }
 
 /* ---------- 画面 ---------- */
@@ -604,13 +651,14 @@ function linesHtml(lines, ordered, key){
 }
 
 function viewHome(){
+  if(VIEWER()) return '<div class="stack">' + viewShiftCard() + viewAround() + '<p class="sub">閲覧用のログインです。シフトとギャラリーの予定が見られます。</p></div>';
   const now = jstNow(), tom = new Date(now.getTime() + 864e5), tw = tom.getUTCDay();
   const tomKind = tw === 1 ? "closed" : (tw === 0 || tw === 6) ? "weekend" : "weekday";
   const po = progress("open"), pc = progress("close");
   const shorts = S.notes.filter(n => n.kind === "short" && !n.resolved_at);
   const lastNote = S.notes.find(n => n.kind === "note");
   const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
-  return '<div class="stack">' + viewPunch() + viewMyShift() + viewShiftCard() + viewAround() +
+  return '<div class="stack">' + viewPunch() + viewRequests(true) + viewMyShift() + viewShiftCard() + viewAround() +
     '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
     '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
       (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : '<p class="sub">いま足りないものはありません。</p>') +
@@ -634,6 +682,7 @@ function viewCheck(list){
       '<button type="button" data-go="check-close" aria-pressed="' + (list === "close") + '">閉店作業</button></div>' +
     '<div class="sticky-meter"><div class="row"><span class="label">' + esc(L.title) + "・" + S.date.slice(5).replace("-","/") + '</span><b style="font-variant-numeric:tabular-nums">' + p.n + " / " + p.total + '</b></div><div class="meter"><i style="width:' + (p.n/p.total*100) + '%"></i></div>' +
       (r && r.completed_at ? '<p class="sub" style="margin-top:4px">' + fmtTime(r.completed_at) + " にすべて完了</p>" : (p.n < p.total ? '<button type="button" class="btn sm ghost bulk-all" data-list="' + list + '" style="margin-top:8px">残り' + (p.total - p.n) + '項目をまとめて済みにする</button>' : "")) + "</div>" +
+    (list === "open" ? viewRequests(false) : "") +
     L.sections.map(s => {
       const k = s.items.filter(i => m[i[0]]).length;
       const left = s.items.filter(i => !m[i[0]]).map(i => i[0]).join(",");
@@ -642,6 +691,7 @@ function viewCheck(list){
       "</div></section>";
     }).join("") +
     '<p class="sub">チェックは同じ日に出勤している人どうしで共有されます。押し直すと外せます。</p>' +
+    (list === "close" ? viewHandover() : "") +
     '<details style="margin-top:4px"><summary class="sub" style="cursor:pointer;padding:4px 2px">紙のマニュアルを見る</summary><div style="margin-top:8px">' + photosHtml(list, list === "open" ? "開店前準備マニュアル（紙）" : "閉店作業マニュアル（紙）") + "</div></details>" +
   "</div>";
 }
@@ -706,6 +756,8 @@ function render(){
     return;
   }
   document.querySelector(".tabs").hidden = false;
+  document.querySelectorAll('.tabs a[data-tab="check"],.tabs a[data-tab="notes"]').forEach(a => { a.hidden = VIEWER(); });
+  if(VIEWER() && (r.startsWith("check-") || r === "notes")){ location.hash = "#home"; return; }
   if(r.startsWith("check-")){ const l = r.slice(6) === "close" ? "close" : "open"; mem.set("lastList", l); html = viewCheck(l); tab = "check"; }
   else if(r === "notes"){ html = viewNotes(); tab = "notes"; }
   else if(r === "shift"){ html = viewShift(); tab = "home"; }
@@ -714,7 +766,7 @@ function render(){
   else { html = viewHome(); tab = "home"; }
   if(S.error && tab !== "manual") html = '<p class="err">' + esc(S.error) + "。電波を確認して開き直してください。</p>" + html;
   const keep = document.activeElement && document.activeElement.id;
-  const vals = {}; ["shortIn","noteIn"].forEach(k => { const el = document.getElementById(k); if(el) vals[k] = el.value; });
+  const vals = {}; ["shortIn","noteIn","taskIn"].forEach(k => { const el = document.getElementById(k); if(el) vals[k] = el.value; });
   $("#view").innerHTML = html;
   Object.keys(vals).forEach(k => { const el = document.getElementById(k); if(el) el.value = vals[k]; });
   if(keep && document.getElementById(keep) && /In$/.test(keep)) document.getElementById(keep).focus();
@@ -729,13 +781,17 @@ $("#view").addEventListener("click", e => {
   const bk = e.target.closest(".bulk"); if(bk){ setChecks(bk.dataset.list, bk.dataset.ids.split(","), true, true); return; }
   const ba = e.target.closest(".bulk-all"); if(ba){ const l = ba.dataset.list, m = doneMap(l), left = allItems(l).filter(i => !m[i]);
     if(left.length && confirm("残りの" + left.length + "項目をまとめて済みにしますか？\n（あとから1つずつ外せます）")) setChecks(l, left, true, true); return; }
+  const rs = e.target.closest("[data-resolve]"); if(rs){ resolveNote(rs.dataset.resolve); return; }
   const c = e.target.closest(".chk"); if(c){ toggle(c.dataset.list, c.dataset.id); return; }
   const g = e.target.closest("[data-go]"); if(g){ location.hash = g.dataset.go; return; }
-  const rs = e.target.closest("[data-resolve]"); if(rs){ resolveNote(rs.dataset.resolve); }
+  const tk = e.target.closest("[data-task]"); if(tk){ addNote("task", tk.dataset.task); return; }
+  const ch = e.target.closest("[data-cash]"); if(ch){ addNote("cash", ch.dataset.cash); return; }
+  if(e.target.id === "copyHand"){ const t = handoverText(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("コピーしました。LINEに貼ってください")).catch(() => prompt("コピーしてLINEに貼ってください", t)); }
 });
 $("#view").addEventListener("submit", async e => {
   e.preventDefault();
   if(e.target.id === "shortForm"){ const v = $("#shortIn").value.trim(); if(!v) return $("#shortIn").focus(); if(await addNote("short", v)) $("#shortIn").value = ""; }
+  if(e.target.id === "taskForm"){ const v = $("#taskIn").value.trim(); if(!v) return $("#taskIn").focus(); if(await addNote("task", v)) $("#taskIn").value = ""; }
   if(e.target.id === "noteForm"){ const v = $("#noteIn").value.trim(); if(!v) return $("#noteIn").focus(); if(await addNote("note", v)) $("#noteIn").value = ""; }
 });
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0,0); });
