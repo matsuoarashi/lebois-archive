@@ -130,7 +130,16 @@ function slotTimes_(src) {
 const SB_URL = 'https://vedljpcvxchneazuoguo.supabase.co';
 const SB_KEY = 'sb_publishable_byKaWl2cyzwg1gA-QyfEoQ_mPF9N-1e';
 
-function doGet(e) { return json_({ ok: false, error: 'login_required' }); }
+function doGet(e) {
+  // 管理用：テストURLに ?run=around を付けて開くと、MOTの表を作りギャラリーの件数だけを返す（中身は返さない）
+  if (e && e.parameter && e.parameter.run === 'around') {
+    const r = setupMot();
+    CacheService.getScriptCache().remove('gallery_v2');
+    const g = gallery_();
+    return json_({ ok: true, mot: r, gallery: g.error || (g.items.length + '件') });
+  }
+  return json_({ ok: false, error: 'login_required' });
+}
 
 function doPost(e) {
   let token = '';
@@ -179,7 +188,119 @@ function payload_() {
   } catch (err) {
     out.ok = false; out.error = String(err && err.message || err);
   }
+  try { out.gallery = gallery_(); } catch (e) { out.gallery = { items: [], error: 'ギャラリーの予定を読み込めませんでした' }; }
+  try { out.mot = mot_(); } catch (e) { out.mot = []; }
   return out;
+}
+
+/* ---------- ギャラリー Klyuch（gallery.klyuch@gmail.com のカレンダー） ----------
+ * スタッフに出すのは「確定」「開催中」の展示名・会期・搬入日だけ。
+ * お客様のお名前・金額・入金状況・仮押さえは出さない。
+ * 予約システムが作った予定（説明欄に [klyuch-auto]）は、お客様欄の（ ）内＝展示名・ブランド名を使い、
+ * なければ「ギャラリーのご利用」と出す。
+ * 手で入れた予定（「三村様(LINE)27日搬入日」のような題名）は、お名前・連絡手段・料金のメモを出さず、
+ * 種類（展示・受注会・見学）と日にち・搬入日・時間だけを出す。休館日は出さない。 */
+const GALLERY_CAL = 'gallery.klyuch@gmail.com';
+
+function gallery_() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('gallery_v2');
+  if (hit) return JSON.parse(hit);
+  let cal = CalendarApp.getCalendarById(GALLERY_CAL);
+  // 共有されただけでは自分のカレンダー一覧に入らず null になるので、一度だけ登録する
+  if (!cal) { try { cal = CalendarApp.subscribeToCalendar(GALLERY_CAL, { hidden: true, selected: false }); } catch (err) { cal = null; } }
+  if (!cal) return { items: [], error: 'ギャラリーのカレンダーがまだ共有されていません' };
+  const p = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd').split('/');
+  const from = new Date(+p[0], +p[1] - 1, +p[2]);  // appsscript.json の timeZone は Asia/Tokyo
+  const to = new Date(from.getTime() + (DAYS + 1) * 864e5);
+  const items = [];
+  cal.getEvents(new Date(from.getTime() - 60 * 864e5), to).forEach(ev => {
+    const title = String(ev.getTitle() || '');
+    const desc = String(ev.getDescription() || '');
+    const auto = desc.indexOf('[klyuch-auto]') !== -1;
+    const st = (title.match(/^【([^】]+)】/) || [])[1] || '';
+    if (/仮|入金|終了|キャンセル/.test(st)) return;
+    if (auto && !/確定|開催中/.test(st)) return;
+    const venue = (title.replace(/^【[^】]+】/, '').match(/^\[([^\]]+)\]/) || [])[1] || 'ギャラリー';
+    if (!auto && /休館/.test(title)) return;
+    // 終日予定の終わりは翌日0時なので1日戻す
+    const allDay = ev.isAllDayEvent();
+    const s = allDay ? ev.getAllDayStartDate() : ev.getStartTime();
+    const e = allDay ? new Date(ev.getAllDayEndDate().getTime() - 864e5) : ev.getEndTime();
+    let start = Utilities.formatDate(s, TZ, 'yyyy/MM/dd'), moveIn = '', time = '';
+    let end = Utilities.formatDate(e, TZ, 'yyyy/MM/dd');
+    let name;
+    if (auto) {
+      name = (desc.match(/お客様:[^\n(（]*[（(]([^)）\n]+)[)）]/) || [])[1] || 'ギャラリーのご利用';
+      if (/前日搬入あり/.test(desc)) { moveIn = start; start = Utilities.formatDate(new Date(s.getTime() + 864e5), TZ, 'yyyy/MM/dd'); }
+    } else {
+      const owner = /オーナー対応/.test(title);
+      if (/見学|内見/.test(title)) name = owner ? '見学のお客さま（オーナー対応）' : '見学のお客さま';
+      else if (/受注会/.test(title)) name = '受注会';
+      else if (/ワークショップ|WS/.test(title)) name = 'ワークショップ';
+      else name = '展示・イベント';
+      // 「27日搬入日」「[8日搬入のみ]」
+      const mv = title.match(/(\d{1,2})日搬入/);
+      if (mv) {
+        let d = new Date(s.getFullYear(), s.getMonth(), +mv[1]);
+        if (d < new Date(s.getTime() - 15 * 864e5)) d = new Date(s.getFullYear(), s.getMonth() + 1, +mv[1]);
+        const md = Utilities.formatDate(d, TZ, 'yyyy/MM/dd');
+        if (/搬入のみ/.test(title)) {
+          if (md === end) { moveIn = md; start = md; }       // 1日だけの搬入
+          else { moveIn = md; if (md === start) start = Utilities.formatDate(new Date(d.getTime() + 864e5), TZ, 'yyyy/MM/dd'); }
+        } else {
+          moveIn = md;
+          if (md === start && start < end) start = Utilities.formatDate(new Date(d.getTime() + 864e5), TZ, 'yyyy/MM/dd');
+        }
+      }
+    }
+    if (!allDay && start === end) time = Utilities.formatDate(s, TZ, 'H:mm') + '〜' + Utilities.formatDate(e, TZ, 'H:mm');
+    if (end < Utilities.formatDate(from, TZ, 'yyyy/MM/dd')) return;
+    items.push({ name: name.slice(0, 60), venue: venue, start: start, end: end, moveIn: moveIn, time: time });
+  });
+  items.sort((a, b) => (a.moveIn || a.start).localeCompare(b.moveIn || b.start));
+  const out = { items: items };
+  cache.put('gallery_v2', JSON.stringify(out), 600);
+  return out;
+}
+
+/* ---------- 東京都現代美術館（店の表「MOT展覧会」。店長が直せる） ---------- */
+const MOT_SEED = [
+  ['多田美波（仮）', '2026/08/29', '2026/12/06'],
+  ['共時的星叢―時を共にした星たち 越境する芸術のまなざし', '2026/09/05', '2026/12/13'],
+  ['サンプライド財団との共催展（仮）', '2027/02/06', '2027/05/16'],
+  ['ハンス・ハーケ（仮）', '2027/02/06', '2027/05/16'],
+  ['MOTアニュアル2026（仮）', '2027/02/20', '2027/05/30'],
+];
+
+/** エディタで1回実行：カレンダーの許可を出し、MOTの表を作り、結果をログに出す */
+function setupAround() {
+  const r = setupMot();
+  CacheService.getScriptCache().remove('gallery_v2');
+  const g = gallery_();
+  Logger.log(r + '／ギャラリー：' + (g.error || g.items.length + '件'));
+  Logger.log(JSON.stringify(g));
+}
+
+function setupMot() {
+  const store = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('STORE_ID'));
+  const sh = sheet_(store, 'MOT展覧会', ['展覧会名', '開始', '終了', 'メモ']);
+  if (sh.getLastRow() < 2) {
+    sh.getRange(2, 1, MOT_SEED.length, 3).setNumberFormat('@').setValues(MOT_SEED);
+    sh.getRange(2, 4).setValue('2025/10/27 公表の年間予定より。（仮）は正式名が出たら直す');
+  }
+  return 'MOT展覧会：' + (sh.getLastRow() - 1) + '件';
+}
+
+function mot_() {
+  const store = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('STORE_ID'));
+  const sh = store.getSheetByName('MOT展覧会');
+  if (!sh || sh.getLastRow() < 2) return MOT_SEED.map(r => ({ title: r[0], start: r[1], end: r[2] }));
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd');
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 3).getDisplayValues()
+    .map(r => ({ title: String(r[0]).trim(), start: ymd_(r[1]), end: ymd_(r[2]) }))
+    .filter(m => m.title && m.start && m.end && m.end >= today)
+    .sort((a, b) => a.start.localeCompare(b.start));
 }
 
 /* 表示名：「表示名」シートにあればそれ。なければ姓を除いた推定（空白の後ろ／カタカナの後ろ／先頭2文字を除く） */
