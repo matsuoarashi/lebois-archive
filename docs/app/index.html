@@ -381,8 +381,9 @@ function mdS(ds){ const a = ds.split("/"); return (+a[1]) + "/" + (+a[2]); }
 function demoAround(){
   const t = ymdS(jstNow());
   return { gallery: { items: [
-      { name: "見本：ガラスと写真の二人展", venue: "ギャラリー", start: addD(t, -2), end: addD(t, 1), moveIn: addD(t, -3) },
-      { name: "見本：版画の個展", venue: "ギャラリー", start: addD(t, 4), end: addD(t, 8), moveIn: addD(t, 3) }] },
+      { name: "展示・イベント", venue: "ギャラリー", start: addD(t, -2), end: addD(t, 1), moveIn: addD(t, -3) },
+      { name: "見学のお客さま（オーナー対応）", venue: "ギャラリー", start: t, end: t, moveIn: "", time: "14:30〜15:30" },
+      { name: "受注会", venue: "ギャラリー", start: addD(t, 4), end: addD(t, 5), moveIn: addD(t, 3) }] },
     mot: [{ title: "見本：開催中の企画展", start: addD(t, -40), end: addD(t, 3) }, { title: "見本：次の企画展", start: addD(t, 20), end: addD(t, 110) }] };
 }
 function galleryTag(g, d){
@@ -402,9 +403,9 @@ function viewAround(){
   if(G && G.error) h += '<p class="sub" style="margin:0">' + esc(G.error) + "</p>";
   else if(!G) h += '<p class="sub" style="margin:0">ギャラリーの予定はまだつながっていません。</p>';
   else {
-    h += on.length ? '<ul class="lines">' + on.map(g => '<li><div class="body"><span><b>' + esc(g.name) + "</b> " + galleryTag(g, t) + '</span><span class="sub">' + (g.moveIn === t ? "今日は搬入・設営。会期 " : "会期 ") + mdS(g.start) + "〜" + mdS(g.end) + (g.venue && g.venue !== "ギャラリー" ? "・" + esc(g.venue) : "") + "</span></div></li>").join("") + "</ul>"
+    h += on.length ? '<ul class="lines">' + on.map(g => '<li><div class="body"><span><b>' + esc(g.name) + "</b> " + galleryTag(g, t) + '</span><span class="sub">' + (g.time ? "今日 " + esc(g.time) : (g.moveIn === t ? "今日は搬入・設営。会期 " : "会期 ") + mdS(g.start) + "〜" + mdS(g.end)) + (g.venue && g.venue !== "ギャラリー" ? "・" + esc(g.venue) : "") + "</span></div></li>").join("") + "</ul>"
       : '<p class="sub" style="margin:0">今日のギャラリーは展示がありません。</p>';
-    if(next.length) h += '<p class="sub" style="margin:8px 0 0">この先1週間：' + next.map(g => esc(g.name) + "（" + (g.moveIn ? "搬入 " + mdS(g.moveIn) + "、" : "") + mdS(g.start) + "〜" + mdS(g.end) + "）").join("、") + "</p>";
+    if(next.length) h += '<p class="sub" style="margin:8px 0 0">この先1週間：' + next.map(g => esc(g.name) + "（" + (g.time ? mdS(g.start) + " " + esc(g.time) : (g.moveIn ? "搬入 " + mdS(g.moveIn) + "、" : "") + (g.start === g.end ? mdS(g.start) : mdS(g.start) + "〜" + mdS(g.end))) + "）").join("、") + "</p>";
   }
   h += '<p class="sub" style="margin:8px 0 0">撮影や作家さんごとのお願いはLINEで届きます。</p></section>';
   const mot = (SH.mot || []).filter(m => m.end >= t);
