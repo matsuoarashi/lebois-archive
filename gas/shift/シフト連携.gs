@@ -127,8 +127,8 @@ function slotTimes_(src) {
  * スタッフアプリはログイン後、POST で {token} を送ってくる。
  * token が本物かは Supabase（lb_whoami）に聞く。ログインしていない人にはシフトを返さない。
  * 公開用の鍵（publishable key）はページにも載る公開の値なので、ここに書いてよい */
-const SB_URL = 'https://xqmdgvgiagxsysuzwfhi.supabase.co';
-const SB_KEY = 'sb_publishable_ixl6WvsJIE6HEzjFuRxKyw_2Lqw__sa';
+const SB_URL = 'https://vedljpcvxchneazuoguo.supabase.co';
+const SB_KEY = 'sb_publishable_byKaWl2cyzwg1gA-QyfEoQ_mPF9N-1e';
 
 function doGet(e) { return json_({ ok: false, error: 'login_required' }); }
 
