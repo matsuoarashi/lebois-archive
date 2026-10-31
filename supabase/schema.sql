@@ -17,7 +17,7 @@ create table if not exists lb_staff (
   id           uuid primary key default gen_random_uuid(),
   store_id     text not null default 'lebois',
   name         text not null check (char_length(name) between 1 and 20),  -- アプリでの表示名（下の名前など）
-  role         text not null default 'staff' check (role in ('staff','manager')),
+  role         text not null default 'staff' check (role in ('staff','manager','viewer')),  -- viewer＝閲覧のみ（ギャラリー担当など。シフトと予定だけ見える）
   pin_hash     text,
   fails        int  not null default 0,
   locked_until timestamptz,
@@ -54,7 +54,7 @@ create table if not exists lb_check_runs (
 create table if not exists lb_notes (
   id          uuid primary key default gen_random_uuid(),
   store_id    text not null default 'lebois',
-  kind        text not null check (kind in ('note','short')),
+  kind        text not null check (kind in ('note','short','task','cash')),  -- note=引き継ぎ short=足りないもの task=明日の人へ cash=両替
   body        text not null check (char_length(body) between 1 and 1000),
   staff       text not null check (char_length(staff) between 1 and 40),
   created_at  timestamptz not null default now(),
@@ -263,11 +263,13 @@ grant execute on function lb_staff_list(text), lb_login(uuid, text), lb_logout(u
 insert into lb_staff (name, sort) values
   ('柚那',10),('愛',20),('由希子',30),('葵',40),('亜妃',50),('琉月',60),('弘樹',70),('菜々',80),
   ('初凪',90),('花連',100),('絵梨',110),('香織',120),('智尋',130),('和実',140),('唯',150),
-  ('佳奈',160),('新史',170)
+  ('佳奈',160),('新史',170),('岩崎',180)
 on conflict (store_id, name) do nothing;
 
 -- 管理者（番号の消去・習熟度一覧）：岡田葵・古川佳奈・松尾新史
 update lb_staff set role = 'manager' where store_id = 'lebois' and name in ('葵','佳奈','新史');
+-- 閲覧のみ：岩崎さん（ギャラリー担当。誰が出勤かを見るため）
+update lb_staff set role = 'viewer' where store_id = 'lebois' and name = '岩崎';
 
 -- シフト押し込み用の合鍵（初回だけランダムに作る）
 insert into lb_secrets (name, value) values ('shift_push', encode(extensions.gen_random_bytes(24), 'hex'))
