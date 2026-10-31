@@ -6,8 +6,8 @@
  */
 window.LB_CONFIG = {
   store: "lebois",
-  supabaseUrl: "https://xqmdgvgiagxsysuzwfhi.supabase.co",
-  anonKey: "sb_publishable_ixl6WvsJIE6HEzjFuRxKyw_2Lqw__sa",
+  supabaseUrl: "https://vedljpcvxchneazuoguo.supabase.co",
+  anonKey: "sb_publishable_byKaWl2cyzwg1gA-QyfEoQ_mPF9N-1e",
   /* シフト（シフト連携の Apps Script・ウェブアプリURL）。空ならシフトは出さない */
   shiftUrl: "https://script.google.com/macros/s/AKfycbysQ3EqqvZwUHXrlHXeKUbZfw8I9nZ3J0egbD7p3kDu0eOSCQ0aWFleG0iv3fIQhKA/exec",
   /* 日報（Apps Script のウェブアプリ・スタッフ用URL） */
