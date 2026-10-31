@@ -2,12 +2,12 @@
  *
  * supabaseUrl と anonKey が空のあいだは「お試しモード」で動く（記録はその端末だけに残る）。
  * Supabase の Project Settings → API にある Project URL と anon public key を入れると本番になる。
- * anon key は公開してよい鍵（読み書きできる範囲は schema.sql の権限で絞ってある）。
+ * anonKey は公開してよい鍵（publishable key）。表には直接さわれず、ログインの番号を確かめる関数だけ呼べる（schema.sql）。
  */
 window.LB_CONFIG = {
   store: "lebois",
-  supabaseUrl: "",
-  anonKey: "",
+  supabaseUrl: "https://xqmdgvgiagxsysuzwfhi.supabase.co",
+  anonKey: "sb_publishable_ixl6WvsJIE6HEzjFuRxKyw_2Lqw__sa",
   /* シフト（シフト連携の Apps Script・ウェブアプリURL）。空ならシフトは出さない */
   shiftUrl: "https://script.google.com/macros/s/AKfycbysQ3EqqvZwUHXrlHXeKUbZfw8I9nZ3J0egbD7p3kDu0eOSCQ0aWFleG0iv3fIQhKA/exec",
   /* 日報（Apps Script のウェブアプリ・スタッフ用URL） */

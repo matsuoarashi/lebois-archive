@@ -141,6 +141,17 @@ input[type=text]{width:100%;min-height:46px;border:1px solid var(--line);border-
 /* name dialog */
 .sheet{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center}
 .sheet[hidden]{display:none!important}
+.tabs[hidden],.who[hidden]{display:none!important}
+.login{display:flex;flex-direction:column;gap:14px;padding-top:8px}
+.login .names button{min-width:72px}
+.login .names button.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.dots{display:flex;gap:14px;justify-content:center;margin:6px 0}
+.dots i{width:14px;height:14px;border-radius:50%;border:2px solid var(--ink);display:block}
+.dots i.f{background:var(--ink)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:0 auto;width:100%}
+.pad button{min-height:56px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-size:22px}
+.pad button.x{font-size:14px;color:var(--mute)}
+.mine{border-left:4px solid var(--ink)}
 .sheet .in{background:var(--surface);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px max(16px,env(safe-area-inset-left,0px)) calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px}
 .names{display:flex;flex-wrap:wrap;gap:6px}
 .names button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:6px 14px;min-height:38px}
@@ -204,33 +215,38 @@ const mem = {
 };
 
 /* ---------- 保存先 ---------- */
-const remote = {
-  h(extra){ return Object.assign({ apikey: CFG.anonKey, Authorization: "Bearer " + CFG.anonKey, "Content-Type": "application/json" }, extra || {}); },
-  async req(path, opt){
-    const r = await fetch(CFG.supabaseUrl.replace(/\/$/,"") + "/rest/v1/" + path, opt);
-    if(!r.ok){ throw new Error("保存先に接続できませんでした（" + r.status + "）"); }
-    return r.status === 204 ? null : r.json();
-  },
-  async getRuns(date){
-    return this.req("lb_check_runs?store_id=eq." + STORE + "&biz_date=eq." + date + "&select=*", { headers: this.h() });
-  },
-  async putRun(row){
-    const out = await this.req("lb_check_runs?on_conflict=store_id,list,biz_date", {
-      method: "POST", headers: this.h({ Prefer: "resolution=merge-duplicates,return=representation" }),
-      body: JSON.stringify(Object.assign({ store_id: STORE }, row))
-    });
-    return out && out[0];
-  },
-  async getNotes(){
-    const since = new Date(Date.now() - 14*864e5).toISOString();
-    return this.req("lb_notes?store_id=eq." + STORE + "&or=" + encodeURIComponent("(resolved_at.is.null,created_at.gte." + since + ")") + "&order=created_at.desc&limit=200", { headers: this.h() });
-  },
-  async addNote(n){
-    return this.req("lb_notes", { method: "POST", headers: this.h({ Prefer: "return=minimal" }), body: JSON.stringify(Object.assign({ store_id: STORE }, n)) });
-  },
-  async resolve(id, by){
-    return this.req("lb_notes?id=eq." + encodeURIComponent(id), { method: "PATCH", headers: this.h({ Prefer: "return=minimal" }), body: JSON.stringify({ resolved_at: new Date().toISOString(), resolved_by: by }) });
+/* ログイン（名前＋4桁）。番号は Supabase 側で確かめる。端末には token だけ覚える */
+const AUTH = { token: mem.get("token", ""), name: mem.get("authName", ""), role: mem.get("authRole", ""), id: mem.get("authId", "") };
+function rpcHeaders(){
+  const h = { apikey: CFG.anonKey, "Content-Type": "application/json" };
+  if(!/^sb_/.test(CFG.anonKey || "")) h.Authorization = "Bearer " + CFG.anonKey;  // 旧形式の anon key のときだけ
+  return h;
+}
+async function rpc(fn, args){
+  const r = await fetch(CFG.supabaseUrl.replace(/\/$/,"") + "/rest/v1/rpc/" + fn, { method: "POST", headers: rpcHeaders(), body: JSON.stringify(args || {}) });
+  const t = await r.text();
+  let j = null; try{ j = t ? JSON.parse(t) : null; }catch(e){}
+  if(!r.ok){
+    const m = (j && j.message) || "";
+    if(/login_required/.test(m)){ logout(true); throw new Error("もう一度ログインしてください"); }
+    if(/locked/.test(m)) throw new Error("番号を5回まちがえたので15分お待ちください");
+    throw new Error("保存先に接続できませんでした（" + r.status + "）");
   }
+  return j;
+}
+function logout(silent){
+  const t = AUTH.token;
+  ["token","authName","authRole","authId"].forEach(k => mem.set(k, ""));
+  AUTH.token = AUTH.name = AUTH.role = AUTH.id = "";
+  if(t && !silent){ rpc("lb_logout", { p_token: t }).catch(() => {}); }
+  updateWho(); render();
+}
+const remote = {
+  async getRuns(date){ return rpc("lb_get_runs", { p_token: AUTH.token, p_date: date }); },
+  async putRun(row){ return rpc("lb_put_run", { p_token: AUTH.token, p_list: row.list, p_date: row.biz_date, p_done: row.done, p_completed: !!row.completed_at }); },
+  async getNotes(){ return rpc("lb_get_notes", { p_token: AUTH.token }); },
+  async addNote(n){ return rpc("lb_add_note", { p_token: AUTH.token, p_kind: n.kind, p_body: n.body }); },
+  async resolve(id){ return rpc("lb_resolve", { p_token: AUTH.token, p_id: id }); }
 };
 const local = {
   async getRuns(date){ return mem.get("runs", []).filter(r => r.biz_date === date); },
@@ -275,12 +291,14 @@ function seedDemo(real){
   mem.set("seeded", today + (R.length ? "|real" : ""));
 }
 /* 見本の記録は、シフト表の実際の名前（下の名前）で作る。シフトを読んでから load 前に入れる */
-function staffNames(){ const out = []; SH.days.forEach(d => d.items.forEach(it => { if(it.name && out.indexOf(it.name) < 0) out.push(it.name); })); return out; }
+let DEMO_NAMES = [];
+function staffNames(){ if(DEMO_NAMES.length) return DEMO_NAMES.slice();
+  const out = []; SH.days.forEach(d => d.items.forEach(it => { if(it.name && out.indexOf(it.name) < 0) out.push(it.name); })); return out; }
 
 /* ---------- シフト（シフト表から。スタッフアプリは表示だけ） ---------- */
 const SH = { days: mem.get("shifts", { days: [] }).days || [], updated: "", error: "", at: 0 };
-function demoShifts(){
-  const names = ["はな", "けい", "ゆう", "そら", "りん"], plan = [
+function demoShifts(real){
+  const names = real && real.length >= 5 ? real.slice(0, 5) : ["はな", "けい", "ゆう", "そら", "りん"], plan = [
     [["早番","10:30","14:30",0],["終日","10:30","18:30",1]], [["終日","10:30","18:30",2],["遅番","14:30","18:30",-1]],
     [["早番","10:30","14:30",3],["遅番","14:30","18:30",0]], [["終日","10:30","18:30",4],["終日","10:30","18:30",1]]];
   const days = [];
@@ -292,12 +310,15 @@ function demoShifts(){
   return days;
 }
 async function loadShifts(force){
-  if(DEMO && !CFG.shiftUrl){ SH.days = demoShifts(); SH.updated = "見本"; return; }
+  if(DEMO && (!CFG.shiftUrl || CFG.supabaseUrl)){ SH.days = demoShifts(DEMO_NAMES); SH.updated = "見本"; return; }
   if(!CFG.shiftUrl) return;
   if(!force && Date.now() - SH.at < 10*60e3) return;
   SH.at = Date.now();
   try{
-    const r = await fetch(CFG.shiftUrl, { cache: "no-store" });
+    if(LIVE && !AUTH.token) return;
+    const r = LIVE
+      ? await fetch(CFG.shiftUrl, { method: "POST", body: JSON.stringify({ token: AUTH.token }) })  // text/plain なので事前確認なしで届く
+      : await fetch(CFG.shiftUrl, { cache: "no-store" });
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || "読み込めませんでした");
     SH.days = j.days || []; SH.updated = j.updated || ""; SH.error = "";
@@ -310,6 +331,66 @@ function shiftItems(items){
     (it.memo ? '<span class="sub">' + esc(it.memo) + "</span>" : "") + "</li>").join("") + "</ul>";
 }
 function dayLabel(ds){ const d = new Date(ds.replace(/\//g, "-") + "T00:00:00Z"); return (d.getUTCMonth()+1) + "/" + d.getUTCDate() + "（" + WD[d.getUTCDay()] + "）"; }
+/* ---------- ログイン画面 ---------- */
+const LG = { list: null, pick: null, pin: "", first: "", step: "pick", msg: "", busy: false };
+function viewLogin(){
+  if(!LG.list){ loadStaffList(); return '<div class="login"><h1>le bois スタッフ</h1><p class="sub">読み込み中…</p></div>'; }
+  const p = LG.list.find(x => x.id === LG.pick);
+  let h = '<div class="login"><h1>ログイン</h1><p class="sub">自分の名前を選んで、4桁の番号を入れてください。</p>' +
+    '<div class="names" id="lgNames">' + LG.list.map(x => '<button type="button" data-id="' + esc(x.id) + '" class="' + (x.id === LG.pick ? "on" : "") + '">' + esc(x.name) + "</button>").join("") + "</div>";
+  if(p){
+    const lead = !p.has_pin ? (LG.step === "confirm" ? "確認のため、同じ番号をもう一度" : "はじめてなので、自分で4桁の番号を決めてください（誕生日など人に分かる番号は避けてください）") : p.name + " さんの番号";
+    h += '<section class="card"><p style="margin:0;text-align:center">' + esc(lead) + '</p><div class="dots">' + [0,1,2,3].map(i => '<i class="' + (i < LG.pin.length ? "f" : "") + '"></i>').join("") + "</div>" +
+      (LG.msg ? '<p class="err" style="margin:0;text-align:center">' + esc(LG.msg) + "</p>" : "") +
+      '<div class="pad" id="lgPad">' + ["1","2","3","4","5","6","7","8","9","","0","del"].map(k => k === "" ? "<span></span>" : '<button type="button" data-k="' + k + '"' + (k === "del" ? ' class="x">消す' : ">" + k) + "</button>").join("") + "</div></section>";
+  }
+  return h + '<p class="sub">番号を忘れたときは店長に伝えてください。消してもらうと、次に入るときに決め直せます。</p></div>';
+}
+async function loadStaffList(){
+  try{ LG.list = await rpc("lb_staff_list", {}); }catch(e){ LG.list = []; LG.msg = e.message; }
+  render();
+}
+async function pressKey(k){
+  if(LG.busy) return;
+  const p = LG.list.find(x => x.id === LG.pick); if(!p) return;
+  if(k === "del"){ LG.pin = LG.pin.slice(0, -1); LG.msg = ""; render(); return; }
+  if(LG.pin.length >= 4) return;
+  LG.pin += k; LG.msg = ""; render();
+  if(LG.pin.length < 4) return;
+  if(!p.has_pin && LG.step !== "confirm"){ LG.first = LG.pin; LG.pin = ""; LG.step = "confirm"; render(); return; }
+  if(!p.has_pin && LG.pin !== LG.first){ LG.pin = ""; LG.first = ""; LG.step = "pick"; LG.msg = "2回の番号がちがいました。もう一度決めてください"; render(); return; }
+  LG.busy = true;
+  try{
+    const out = await rpc("lb_login", { p_staff: p.id, p_pin: LG.pin });
+    const row = out && out[0];
+    if(!row || !row.token){ LG.pin = ""; LG.msg = "番号がちがいます"; LG.busy = false; render(); return; }
+    AUTH.token = row.token; AUTH.name = row.name; AUTH.role = row.role; AUTH.id = p.id;
+    mem.set("token", AUTH.token); mem.set("authName", AUTH.name); mem.set("authRole", AUTH.role); mem.set("authId", AUTH.id);
+    Object.assign(LG, { pick: null, pin: "", first: "", step: "pick", msg: "", busy: false, list: null });
+    toast(row.first_time ? "番号を決めました。次からはこの番号で入れます" : "おかえりなさい、" + AUTH.name + " さん");
+    updateWho(); await load(); loadShifts(true).then(render);
+  }catch(e){ LG.pin = ""; LG.msg = e.message; LG.busy = false; render(); }
+}
+document.addEventListener("click", e => {
+  const n = e.target.closest("#lgNames button[data-id]");
+  if(n){ LG.pick = n.dataset.id; LG.pin = ""; LG.first = ""; LG.step = "pick"; LG.msg = ""; render(); return; }
+  const k = e.target.closest("#lgPad button[data-k]");
+  if(k) pressKey(k.dataset.k);
+});
+
+/* 自分の次の出勤 */
+function viewMyShift(){
+  const name = me(); if(!name || !SH.days.length) return "";
+  const today = bizDate().replace(/-/g, "/");
+  const mine = [];
+  SH.days.forEach(d => d.items.forEach(it => { if(it.name === name && d.date >= today) mine.push({ date: d.date, it }); }));
+  if(!mine.length) return '<section class="card mine"><h2>' + esc(name) + ' さんの出勤</h2><p class="sub" style="margin:0">2週間以内の出勤は入っていません。</p></section>';
+  const n = mine[0];
+  return '<section class="card mine"><div class="row"><h2>' + esc(name) + ' さんの次の出勤</h2><span class="pill">' + (n.date === today ? "今日" : esc(dayLabel(n.date))) + "</span></div>" +
+    '<p style="margin:0;font-size:18px"><b>' + esc(n.it.start) + "〜" + esc(n.it.end) + '</b> <span class="sub">' + esc(n.it.slot) + "</span></p>" +
+    (mine.length > 1 ? '<p class="sub" style="margin:0">そのあと：' + mine.slice(1, 4).map(m => esc(dayLabel(m.date)) + " " + esc(m.it.start)).join("、") + "</p>" : "") + "</section>";
+}
+
 function viewShiftCard(){
   if(!DEMO && !CFG.shiftUrl) return "";
   const today = bizDate().replace(/-/g, "/"), t = SH.days.find(d => d.date === today);
@@ -348,7 +429,7 @@ async function load(){
 
 /* ---------- 名前 ---------- */
 let pendingName = null;
-function me(){ return mem.get("name", ""); }
+function me(){ return LIVE ? AUTH.name : mem.get("name", ""); }
 function askName(){
   return new Promise(res => {
     pendingName = res;
@@ -363,9 +444,9 @@ function closeName(v){ $("#sheet").hidden = true; if(pendingName){ const p = pen
 $("#nameChips").addEventListener("click", e => { const b = e.target.closest("button[data-n]"); if(b){ $("#nameInput").value = b.dataset.n; } });
 $("#nameForm").addEventListener("submit", e => { e.preventDefault(); const v = $("#nameInput").value.trim(); if(!v){ $("#nameInput").focus(); return; } mem.set("name", v); updateWho(); closeName(v); });
 $("#nameCancel").addEventListener("click", () => closeName(null));
-$("#who").addEventListener("click", () => askName());
-async function needName(){ return me() || await askName(); }
-function updateWho(){ $("#who").textContent = me() ? me() + " さん" : "名前を選ぶ"; }
+$("#who").addEventListener("click", () => { if(LIVE){ if(AUTH.token && confirm(AUTH.name + " さんをこの端末からログアウトしますか？")) logout(); return; } askName(); });
+async function needName(){ if(LIVE) return AUTH.token ? AUTH.name : ""; return me() || await askName(); }
+function updateWho(){ $("#who").textContent = me() ? me() + " さん" : (LIVE ? "ログイン" : "名前を選ぶ"); $("#who").hidden = LIVE && !AUTH.token; }
 
 function toast(t){ const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
 
@@ -427,7 +508,7 @@ function viewHome(){
   const shorts = S.notes.filter(n => n.kind === "short" && !n.resolved_at);
   const lastNote = S.notes.find(n => n.kind === "note");
   const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
-  return '<div class="stack">' + viewShiftCard() +
+  return '<div class="stack">' + viewMyShift() + viewShiftCard() +
     '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
     '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
       (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : '<p class="sub">いま足りないものはありません。</p>') +
@@ -516,6 +597,12 @@ function render(){
   const r = route();
   $("#today").textContent = (function(){ const d = jstNow(); return (d.getUTCMonth()+1) + "月" + d.getUTCDate() + "日（" + WD[d.getUTCDay()] + "）"; })();
   let html, tab;
+  if(LIVE && !AUTH.token){
+    $("#view").innerHTML = viewLogin();
+    document.querySelector(".tabs").hidden = true; $("#who").hidden = true;
+    return;
+  }
+  document.querySelector(".tabs").hidden = false;
   if(r.startsWith("check-")){ const l = r.slice(6) === "close" ? "close" : "open"; mem.set("lastList", l); html = viewCheck(l); tab = "check"; }
   else if(r === "notes"){ html = viewNotes(); tab = "notes"; }
   else if(r === "shift"){ html = viewShift(); tab = "home"; }
@@ -556,8 +643,9 @@ $("#demo").hidden = LIVE;
 updateWho();
 render();
 if(DEMO){
-  loadShifts(true).then(() => { const n = staffNames(); if(mem.get("seeded", "") !== bizDate() + (n.length ? "|real" : "")) seedDemo(n); return load(); }).then(render);
-}else{
+  (CFG.supabaseUrl ? rpc("lb_staff_list", {}).then(l => { DEMO_NAMES = (l || []).map(x => x.name); }).catch(() => {}) : Promise.resolve())
+  .then(() => loadShifts(true)).then(() => { const n = staffNames(); if(mem.get("seeded", "") !== bizDate() + (n.length ? "|real" : "")) seedDemo(n); return load(); }).then(render);
+}else if(!LIVE || AUTH.token){
   load();
   loadShifts(true).then(render);
 }
