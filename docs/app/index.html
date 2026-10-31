@@ -251,29 +251,31 @@ const local = {
 const db = LIVE ? remote : local;
 
 /* ---------- 見本データ（?demo=1 で開いたときだけ） ---------- */
-function seedDemo(){
+function seedDemo(real){
+  const R = (real || []).filter(Boolean), A = R[0] || "はな", B = R[1] || "けい", Cn = R[2] || "ゆう";
   const today = bizDate(), y = bizDate(new Date(jstNow().getTime() - 864e5));
   const at = (date, hm) => new Date(date + "T" + hm + ":00+09:00").toISOString();
   const ids = list => C.checklists[list].sections.flatMap(s => s.items.map(i => i[0]));
   const openIds = ids("open"), closeIds = ids("close");
-  const openDone = openIds.slice(0, openIds.length - 4).map((id, i) => ({ id, by: i % 3 === 2 ? "けい" : "はな", at: at(today, "09:" + String(30 + i).padStart(2,"0")) }));
-  const closeDone = closeIds.map((id, i) => ({ id, by: i % 2 ? "ゆう" : "けい", at: at(y, (i < 20 ? "18:" + String(10 + i*2).padStart(2,"0") : "19:" + String((i-20)*2).padStart(2,"0"))) }));
+  const openDone = openIds.slice(0, openIds.length - 4).map((id, i) => ({ id, by: i % 3 === 2 ? B : A, at: at(today, "09:" + String(30 + i).padStart(2,"0")) }));
+  const closeDone = closeIds.map((id, i) => ({ id, by: i % 2 ? Cn : B, at: at(y, (i < 20 ? "18:" + String(10 + i*2).padStart(2,"0") : "19:" + String((i-20)*2).padStart(2,"0"))) }));
   mem.set("runs", [
-    { list: "close", biz_date: y, done: closeDone, updated_by: "ゆう", updated_at: at(y, "19:20"), completed_at: at(y, "19:20") },
-    { list: "open", biz_date: today, done: openDone, updated_by: "はな", updated_at: at(today, "09:58"), completed_at: null }
+    { list: "close", biz_date: y, done: closeDone, updated_by: Cn, updated_at: at(y, "19:20"), completed_at: at(y, "19:20") },
+    { list: "open", biz_date: today, done: openDone, updated_by: A, updated_at: at(today, "09:58"), completed_at: null }
   ]);
   mem.set("notes", [
-    { id: "d1", kind: "short", body: "オーツミルク 残り1本", staff: "ゆう", created_at: at(y, "18:40"), resolved_at: null },
-    { id: "d2", kind: "short", body: "テイクアウトカップ（S）残り少なめ", staff: "けい", created_at: at(y, "15:05"), resolved_at: at(today, "09:45"), resolved_by: "はな" },
-    { id: "d3", kind: "short", body: "ペーパーナプキン", staff: "はな", created_at: at(today, "09:50"), resolved_at: null },
-    { id: "d4", kind: "note", body: "テラスのクッションを1つ洗濯に出しています。戻るまで階段下の予備を使ってください。", staff: "ゆう", created_at: at(y, "19:15"), resolved_at: null },
-    { id: "d5", kind: "note", body: "チーズケーキ、今日は週末なので2本解凍済みです。", staff: "けい", created_at: at(y, "19:05"), resolved_at: null },
-    { id: "d6", kind: "note", body: "14時にお花の納品予定。受け取りをお願いします。", staff: "はな", created_at: at(today, "09:55"), resolved_at: null }
+    { id: "d1", kind: "short", body: "オーツミルク 残り1本", staff: Cn, created_at: at(y, "18:40"), resolved_at: null },
+    { id: "d2", kind: "short", body: "テイクアウトカップ（S）残り少なめ", staff: B, created_at: at(y, "15:05"), resolved_at: at(today, "09:45"), resolved_by: A },
+    { id: "d3", kind: "short", body: "ペーパーナプキン", staff: A, created_at: at(today, "09:50"), resolved_at: null },
+    { id: "d4", kind: "note", body: "テラスのクッションを1つ洗濯に出しています。戻るまで階段下の予備を使ってください。", staff: Cn, created_at: at(y, "19:15"), resolved_at: null },
+    { id: "d5", kind: "note", body: "チーズケーキ、今日は週末なので2本解凍済みです。", staff: B, created_at: at(y, "19:05"), resolved_at: null },
+    { id: "d6", kind: "note", body: "14時にお花の納品予定。受け取りをお願いします。", staff: A, created_at: at(today, "09:55"), resolved_at: null }
   ]);
-  mem.set("names", ["はな", "けい", "ゆう"]);
-  mem.set("seeded", today);
+  mem.set("names", R.length ? R : [A, B, Cn]);
+  mem.set("seeded", today + (R.length ? "|real" : ""));
 }
-if(DEMO && mem.get("seeded", "") !== bizDate()) seedDemo();
+/* 見本の記録は、シフト表の実際の名前（下の名前）で作る。シフトを読んでから load 前に入れる */
+function staffNames(){ const out = []; SH.days.forEach(d => d.items.forEach(it => { if(it.name && out.indexOf(it.name) < 0) out.push(it.name); })); return out; }
 
 /* ---------- シフト（シフト表から。スタッフアプリは表示だけ） ---------- */
 const SH = { days: mem.get("shifts", { days: [] }).days || [], updated: "", error: "", at: 0 };
@@ -290,7 +292,7 @@ function demoShifts(){
   return days;
 }
 async function loadShifts(force){
-  if(DEMO){ SH.days = demoShifts(); SH.updated = "見本"; return; }
+  if(DEMO && !CFG.shiftUrl){ SH.days = demoShifts(); SH.updated = "見本"; return; }
   if(!CFG.shiftUrl) return;
   if(!force && Date.now() - SH.at < 10*60e3) return;
   SH.at = Date.now();
@@ -547,14 +549,18 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) load(
 setInterval(() => { if(!document.hidden && !(document.activeElement || document.body).matches("input,textarea")) load(); }, 30000);
 
 if(DEMO){
-  $("#demo").innerHTML = '見本データ入りの確認用画面です。押したりメモしたりしても本番には残りません。 <button type="button" id="demoReset" style="margin-left:4px;border:0;background:none;color:inherit;text-decoration:underline;font:inherit;cursor:pointer;padding:0">見本を最初に戻す</button>';
-  $("#demoReset").addEventListener("click", () => { seedDemo(); load(); toast("見本データを最初の状態に戻しました"); });
+  $("#demo").innerHTML = '確認用の画面です。スタッフの名前とシフトは本物、チェックや引き継ぎの中身は見本です。押したりメモしたりしても本番には残りません。 <button type="button" id="demoReset" style="margin-left:4px;border:0;background:none;color:inherit;text-decoration:underline;font:inherit;cursor:pointer;padding:0">見本を最初に戻す</button>';
+  $("#demoReset").addEventListener("click", () => { seedDemo(staffNames()); load(); toast("見本データを最初の状態に戻しました"); });
 }
 $("#demo").hidden = LIVE;
 updateWho();
 render();
-load();
-loadShifts(true).then(render);
+if(DEMO){
+  loadShifts(true).then(() => { const n = staffNames(); if(mem.get("seeded", "") !== bizDate() + (n.length ? "|real" : "")) seedDemo(n); return load(); }).then(render);
+}else{
+  load();
+  loadShifts(true).then(render);
+}
 setInterval(() => { if(!document.hidden) loadShifts().then(render); }, 60000);
 })();
 </script>
