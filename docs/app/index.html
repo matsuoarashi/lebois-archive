@@ -45,6 +45,7 @@ button{cursor:pointer}
 .brand{display:flex;flex-direction:column;line-height:1.3;min-width:0}
 .brand b{font-size:17px;letter-spacing:.02em}
 .brand span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sps{display:grid;gap:6px;margin:0 0 2px}.sps.two{grid-template-columns:1fr 1fr}.sp{position:relative;display:block;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--line-soft);text-decoration:none}.sp img{display:block;width:100%;height:auto;max-height:240px;object-fit:cover}.sps.two .sp img{height:120px;max-height:none}.hero .sp img{max-height:340px}.sp .tmp{position:absolute;left:6px;bottom:6px;font-size:10.5px;line-height:1.4;background:rgba(0,0,0,.6);color:#fff;padding:2px 7px;border-radius:6px}
 .photos{display:grid;gap:12px}.photos a{display:block;text-decoration:none;color:inherit}.photos img{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--line);background:var(--line-soft)}.photos figure{margin:0}.photos figcaption{font-size:12.5px;color:var(--muted);margin-top:6px}
 .who{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-size:13px;min-height:36px;max-width:50%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .demo{margin:0 0 12px;padding:8px 12px;border-radius:10px;background:var(--hand-soft);color:var(--hand);font-size:12.5px}
@@ -348,11 +349,20 @@ async function resolveNote(id){
 }
 
 /* ---------- 画面 ---------- */
-function linesHtml(lines, ordered){
+function stepPhotos(key){
+  const ids = ((C.steps || {})[key] || []).filter(id => (C.shots || {})[id]);
+  if(!ids.length) return "";
+  return '<div class="sps' + (ids.length > 1 ? " two" : "") + '">' + ids.map(id => {
+    const src = "img/steps/" + id + ".jpg";
+    return '<a class="sp" href="' + esc(src) + '" target="_blank" rel="noopener"><img src="' + esc(src) + '" alt="' + esc(id) + '" decoding="async">' + (C.shots[id].tmp ? '<span class="tmp">紙の写真（仮）</span>' : "") + "</a>";
+  }).join("") + "</div>";
+}
+
+function linesHtml(lines, ordered, key){
   const tag = ordered ? "ol" : "ul";
-  return "<" + tag + ' class="lines">' + lines.map(l => {
+  return "<" + tag + ' class="lines">' + lines.map((l, i) => {
     const t = typeof l === "string" ? l : l.t, q = typeof l === "string" ? "" : l.q;
-    return '<li><div class="body"><span>' + esc(t) + "</span>" + (q ? '<span class="qline">要確認：' + esc(q) + "</span>" : "") + "</div></li>";
+    return '<li><div class="body">' + (key ? stepPhotos(key + ":" + i) : "") + "<span>" + esc(t) + "</span>" + (q ? '<span class="qline">要確認：' + esc(q) + "</span>" : "") + "</div></li>";
   }).join("") + "</" + tag + ">";
 }
 
@@ -439,10 +449,11 @@ function viewManualItem(id){
   const m = C.manual.find(x => x.id === id); if(!m) return viewManual();
   return '<div class="stack">' + back +
     "<div><h1>" + esc(m.title) + "</h1>" + (m.sub ? '<p class="sub">' + esc(m.sub) + "</p>" : "") + (m.flag ? '<p style="margin:6px 0 0"><span class="pill warn">' + esc(m.flag) + "</span></p>" : "") + "</div>" +
+    (stepPhotos(m.id + ":hero") ? '<div class="hero">' + stepPhotos(m.id + ":hero") + "</div>" : "") +
     (m.lead ? '<p style="margin:0">' + esc(m.lead) + "</p>" : "") +
     (m.must ? '<div class="must"><small>厳守</small>' + esc(m.must) + "</div>" : "") +
-    m.sections.map(s => '<section class="card sec"><h2>' + esc(s.h) + "</h2>" + linesHtml(s.lines, s.ordered) + "</section>").join("") +
-    photosHtml(m.id) +
+    m.sections.map((s, si) => '<section class="card sec"><h2>' + esc(s.h) + "</h2>" + stepPhotos(m.id + ":" + si) + linesHtml(s.lines, s.ordered, m.id + ":" + si) + "</section>").join("") +
+    photosHtml(m.id, "元の紙（黄色いファイル）") +
   "</div>";
 }
 

@@ -415,3 +415,38 @@ window.LB_CONTENT.photos = {
   open:    [ { src: "img/open-1.jpg", cap: "開店前準備マニュアル 1/2" }, { src: "img/open-2.jpg", cap: "開店前準備マニュアル 2/2" } ],
   close:   [ { src: "img/close-1.jpg", cap: "閉店作業マニュアル" }, { src: "img/pantry-close.jpg", cap: "閉店時チェック（パントリー配置図の上）" } ]
 };
+
+/* 手順ごとの写真。番号は「le bois レシピ撮影リスト」と同じ。
+ * steps：どこに出すか（"メニューid:hero"＝完成写真、"id:章番号"＝章の頭、"id:章番号:行番号"＝その手順。番号は0から）
+ * shots：写真がある番号。ファイルは img/steps/<番号>.jpg。tmp:true は紙から切り出した仮の写真
+ * 撮影した写真が届いたら、同じ番号のファイルを置いて tmp を外す */
+window.LB_CONTENT.steps = {
+  "cheese:hero": ["K-07"], "cheese:1": ["K-01"], "cheese:2:1": ["K-02"], "cheese:2:2": ["K-03"], "cheese:2:3": ["K-04"],
+  "cheese:3:1": ["K-05"], "cheese:3:2": ["K-06"], "cheese:4:0": ["K-08"], "cheese:5:0": ["K-09"],
+  "gateau:hero": ["G-04"], "gateau:1": ["K-01"], "gateau:2:1": ["G-01"], "gateau:2:3": ["G-02"], "gateau:3:1": ["G-03"],
+  "gateau:4:0": ["G-05"], "gateau:5:0": ["G-06"],
+  "chiffon:hero": ["S-03"], "chiffon:0:0": ["S-04"], "chiffon:1:0": ["S-01", "S-02"],
+  "croche:hero": ["C-15"], "croche:0:0": ["C-01"],
+  "croche:1:0": ["C-02"], "croche:1:1": ["C-03"], "croche:1:2": ["C-04"], "croche:1:3": ["C-05", "C-06"], "croche:1:4": ["C-07"],
+  "croche:1:5": ["C-08", "C-09"], "croche:1:6": ["C-10"], "croche:1:7": ["C-11"], "croche:1:8": ["C-12", "C-13"], "croche:1:9": ["C-14"],
+  "croque:3:0": ["M-01"], "croque:1:0": ["M-02"], "croque:1:1": ["M-03"], "croque:1:2": ["M-04"], "croque:1:3": ["M-05"],
+  "croque:1:4": ["M-06", "M-07"], "croque:1:6": ["M-08"],
+  "pudding:hero": ["P-13"], "pudding:0": ["P-01"], "pudding:0:5": ["P-01b"],
+  "pudding:1:0": ["P-02"], "pudding:1:1": ["P-03"], "pudding:1:3": ["P-04", "P-05", "P-06"], "pudding:1:4": ["P-07"], "pudding:1:5": ["P-08"],
+  "pudding:1:6": ["P-09"], "pudding:1:7": ["P-10"], "pudding:1:8": ["P-11"], "pudding:2:0": ["P-12", "P-12b"],
+  "yakuzen:hero": ["Y-04"], "yakuzen:0:0": ["Y-01"], "yakuzen:0:1": ["Y-02"], "yakuzen:0:2": ["Y-03"], "yakuzen:2:4": ["Y-05"],
+  "caramel:hero": ["L-03"], "caramel:0:2": ["L-01", "L-02"], "caramel:1:0": ["L-04"], "caramel:1:2": ["L-05"],
+  "ginger:hero": ["J-04"], "ginger:0:0": ["J-01"], "ginger:0:1": ["J-02"], "ginger:0:2": ["J-03"], "ginger:1:3": ["J-05"],
+  "orange:1:0": ["O-01"], "orange:2:0": ["O-02"], "orange:2:1": ["O-03"], "orange:2:2": ["O-04"], "orange:2:3": ["O-05"],
+  "picnic:hero": ["N-04"], "picnic:1": ["N-01"], "picnic:2": ["N-02", "N-03"]
+};
+window.LB_CONTENT.shots = {
+  "K-01": { tmp: true }, "K-05": { tmp: true }, "K-07": { tmp: true }, "K-08": { tmp: true }, "K-09": { tmp: true },
+  "G-04": { tmp: true }, "G-05": { tmp: true }, "G-06": { tmp: true },
+  "C-02": { tmp: true }, "C-03": { tmp: true }, "C-04": { tmp: true }, "C-06": { tmp: true }, "C-07": { tmp: true },
+  "C-09": { tmp: true }, "C-10": { tmp: true }, "C-12": { tmp: true }, "C-13": { tmp: true }, "C-14": { tmp: true }, "C-15": { tmp: true },
+  "M-01": { tmp: true }, "M-02": { tmp: true }, "M-03": { tmp: true }, "M-05": { tmp: true }, "M-08": { tmp: true },
+  "P-01": { tmp: true }, "P-01b": { tmp: true }, "P-12": { tmp: true }, "P-12b": { tmp: true }, "P-13": { tmp: true },
+  "Y-01": { tmp: true }, "Y-03": { tmp: true }, "Y-04": { tmp: true },
+  "N-02": { tmp: true }, "N-04": { tmp: true }
+};
