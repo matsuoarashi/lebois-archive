@@ -261,6 +261,7 @@ const remote = {
   async kbList(){ return rpc("lb_kb_list", { p_token: AUTH.token }); },
   async kbPut(e){ return rpc("lb_kb_put", { p_token: AUTH.token, p_category: e.category, p_q: e.q, p_a: e.a, p_keywords: e.keywords || "", p_old: e.old || null }); },
   async kbRetire(id){ return rpc("lb_kb_retire", { p_token: AUTH.token, p_id: id }); },
+  async kbRevert(id){ return rpc("lb_kb_revert", { p_token: AUTH.token, p_id: id }); },
   async ask(body){ return rpc("lb_ask", { p_token: AUTH.token, p_body: body }); },
   async questions(){ return rpc("lb_questions_list", { p_token: AUTH.token }); },
   async answer(qid, e){ return rpc("lb_answer", { p_token: AUTH.token, p_qid: qid, p_category: e.category, p_q: e.q, p_a: e.a, p_keywords: e.keywords || "" }); }
@@ -284,6 +285,9 @@ const local = {
   async kbPut(e, by){ const all = mem.get("kb", []); const id = String(Date.now()); if(e.old){ const o = all.find(x => x.id === e.old); if(o){ o.status = "superseded"; } }
     all.unshift({ id, category: e.category, q: e.q, a: e.a, keywords: e.keywords || "", status: "approved", supersedes: e.old || null, updated_by: by, updated_at: new Date().toISOString() }); mem.set("kb", all); return id; },
   async kbRetire(id, by){ const all = mem.get("kb", []); const o = all.find(x => x.id === id); if(o){ o.status = "superseded"; o.updated_by = by; o.updated_at = new Date().toISOString(); } mem.set("kb", all); },
+  async kbRevert(id, by){ const all = mem.get("kb", []); const k = all.find(x => x.id === id); if(!k) return;
+    if(k.status === "approved" && k.supersedes){ k.status = "superseded"; const o = all.find(x => x.id === k.supersedes); if(o){ o.status = "approved"; o.updated_at = new Date().toISOString(); } }
+    else { k.status = "approved"; k.updated_at = new Date().toISOString(); } mem.set("kb", all); },
   async ask(body, by){ const all = mem.get("qs", []); all.unshift({ id: String(Date.now()), body, staff: by, created_at: new Date().toISOString(), answered_at: null }); mem.set("qs", all); },
   async questions(){ return mem.get("qs", []); },
   async answer(qid, e, by){ const id = await this.kbPut(e, by); const all = mem.get("qs", []); const q = all.find(x => x.id === qid); if(q){ q.answered_at = new Date().toISOString(); q.answered_by = by; q.knowledge_id = id; } mem.set("qs", all); return id; }
@@ -660,6 +664,7 @@ function viewRequests(forHome){
 /* ---------- ルボアに聞く（置き場・決まり・手順。答えられなかった質問は管理者に回って Knowledge になる） ---------- */
 const KB_CATS = ["場所","決まり","手順","設備","ギャラリー","レジ","その他"];
 const IS_MGR = () => !LIVE || AUTH.role === "manager";
+const CAN_EDIT = () => !LIVE || (AUTH.role === "manager" || AUTH.role === "staff");
 function normK(s){ return String(s || "").normalize("NFKC").toLowerCase().replace(/[\s　]+/g, ""); }
 function tokensK(q){
   const n = String(q || "").normalize("NFKC").toLowerCase().trim();
@@ -685,7 +690,7 @@ function searchK(query, cat){
 function kbCard(k){
   const sup = K.items.find(x => x.supersedes === k.id) ? "" : "";
   return '<div class="note"><p style="margin:0"><b>' + esc(k.q) + '</b></p><p style="margin:0;white-space:pre-wrap;overflow-wrap:anywhere">' + esc(k.a) + '</p><div class="meta"><span><span class="pill mute">' + esc(k.category) + "</span> " + (k.updated_by ? esc(k.updated_by) + "・" : "") + fmtTime(k.updated_at).split(" ")[0] + "更新</span>" +
-    (IS_MGR() ? '<span><button type="button" class="btn sm ghost" data-kbedit="' + esc(k.id) + '">直す</button> <button type="button" class="btn sm ghost" data-kbretire="' + esc(k.id) + '">外す</button></span>' : "") + "</div></div>";
+    (CAN_EDIT() ? '<span><button type="button" class="btn sm ghost" data-kbedit="' + esc(k.id) + '">直す</button>' + (IS_MGR() ? ' <button type="button" class="btn sm ghost" data-kbretire="' + esc(k.id) + '">外す</button>' : "") + "</span>" : "") + "</div></div>";
 }
 function kbForm(id, pre){
   pre = pre || {};
@@ -695,6 +700,7 @@ function kbForm(id, pre){
     '<input type="text" name="q" maxlength="200" placeholder="見出し（例：水切りネットはどこ？）" value="' + esc(pre.q || "") + '" required>' +
     '<textarea name="a" maxlength="2000" placeholder="答え" required>' + esc(pre.a || "") + "</textarea>" +
     '<input type="text" name="keywords" maxlength="300" placeholder="言い換え（空白区切り。例：ネット 三角コーナー）" value="' + esc(pre.keywords || "") + '">' +
+    (!IS_MGR() ? '<p class="sub" style="margin:0">前の内容は残ります。違っていたら店長が元に戻せるので、気づいたことはそのまま直してください。</p>' : "") +
     '<div class="row"><button class="btn sm" type="submit">' + (pre.qid ? "答えて決まりに入れる" : pre.old ? "この内容で置き換える" : "追加する") + "</button>" + (pre.old || pre.qid ? ' <button type="button" class="btn sm ghost" data-kbcancel="1">やめる</button>' : "") + "</div></form>";
 }
 function viewAsk(){
@@ -710,13 +716,31 @@ function viewAsk(){
   else h += '<p class="empty">' + (q ? "見つかりませんでした。" : "まだ何も入っていません。") + "</p>";
   if(q) h += '<section class="card"><p class="sub" style="margin:0 0 8px">答えが見つからないときは、そのまま質問として送れます。店長が答えるとここに残ります。</p><button type="button" class="btn full" data-askq="1">「' + esc(q.slice(0, 60)) + '」を質問として送る</button></section>';
   if(K.edit) h += '<section class="card"><h2>' + (K.edit.qid ? "質問に答える" : "直す") + "</h2>" + (K.edit.body ? '<p class="sub">' + esc(K.edit.body) + "</p>" : "") + kbForm("kbEditForm", K.edit) + "</section>";
-  if(IS_MGR()){
-    h += '<section class="card"><div class="row"><h2>未回答の質問</h2><span class="pill' + (open.length ? " warn" : " mute") + '">' + open.length + "件</span></div>" +
+  if(CAN_EDIT()){
+    h += '<section class="card"><div class="row"><h2>まだ答えのない質問</h2><span class="pill' + (open.length ? " warn" : " mute") + '">' + open.length + "件</span></div>" + (open.length ? '<p class="sub" style="margin:0 0 8px">わかる人が答えてください。答えはそのまま「聞く」に残ります。</p>' : "") +
       (open.length ? '<div class="list">' + open.map(x => '<div class="note"><p>' + esc(x.body) + '</p><div class="meta"><span>' + esc(x.staff) + "・" + fmtTime(x.created_at) + '</span><button type="button" class="btn sm ghost" data-kbanswer="' + esc(x.id) + '">答える</button></div></div>').join("") + "</div>" : '<p class="sub" style="margin:0">いまはありません。</p>') + "</section>";
     h += '<details><summary class="sub" style="cursor:pointer;padding:4px 2px">決まりごと・置き場を追加する</summary><div style="margin-top:8px">' + kbForm("kbAddForm") + "</div></details>";
   }
+  if(IS_MGR()) h += kbChanges();
   if(mine.length) h += '<section class="card"><h2>自分が送った質問</h2><div class="list">' + mine.slice(0, 10).map(x => '<div class="note"><p>' + esc(x.body) + '</p><div class="meta"><span>' + fmtTime(x.created_at) + "</span>" + (x.answered_at ? '<span class="pill">' + esc(x.answered_by || "") + " が答えました</span>" : '<span class="pill mute">店長に届いています</span>') + "</div></div>").join("") + "</div></section>";
   return h + "</div>";
+}
+/* 管理者向け：最近14日の変更（前の内容と今の内容。1タップで戻せる） */
+function kbChanges(){
+  const since = Date.now() - 14 * 864e5;
+  const rows = K.items.filter(k => k.updated_by !== "LINE履歴" && new Date(k.updated_at).getTime() > since && (
+    (k.status === "approved" && k.supersedes) ||
+    (k.status === "superseded" && !K.items.some(x => x.supersedes === k.id) && !(k.supersedes && K.items.some(x => x.id === k.supersedes && x.status === "approved")))
+  )).sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 30);
+  const body = rows.length ? '<div class="list">' + rows.map(k => {
+    if(k.status === "superseded") return '<div class="note"><p style="margin:0"><b>外した：</b>' + esc(k.q) + '</p><div class="meta"><span>' + esc(k.updated_by) + "・" + fmtTime(k.updated_at) + '</span><button type="button" class="btn sm ghost" data-kbrevert="' + esc(k.id) + '">戻す</button></div></div>';
+    const o = K.items.find(x => x.id === k.supersedes) || {};
+    return '<div class="note"><p style="margin:0"><b>' + esc(k.q) + '</b></p>' +
+      '<p class="sub" style="margin:0;white-space:pre-wrap;overflow-wrap:anywhere">前：' + esc(o.a || "（不明）") + '</p>' +
+      '<p style="margin:0;white-space:pre-wrap;overflow-wrap:anywhere">今：' + esc(k.a) + '</p>' +
+      '<div class="meta"><span>' + esc(k.updated_by) + "・" + fmtTime(k.updated_at) + '</span><button type="button" class="btn sm ghost" data-kbrevert="' + esc(k.id) + '">元に戻す</button></div></div>';
+  }).join("") + "</div>" : '<p class="sub" style="margin:0">最近の変更はありません。</p>';
+  return '<section class="card"><div class="row"><h2>最近の変更（14日）</h2><span class="pill mute">' + rows.length + "件</span></div>" + body + "</section>";
 }
 function formVals(f){ const o = {}; ["qid","old","category","q","a","keywords"].forEach(k => { const el = f.elements[k]; if(el) o[k] = el.value.trim(); }); return o; }
 async function kbSubmit(f){
@@ -724,8 +748,8 @@ async function kbSubmit(f){
   const who = await needName(); if(!who) return;
   try{
     if(v.qid) await db.answer(v.qid, v, who); else await db.kbPut(v, who);
-    K.edit = null; await load(); toast(v.qid ? "答えました。決まりごとに残ります" : v.old ? "置き換えました" : "追加しました");
-  }catch(e){ toast(e.message === "manager_only" ? "管理者だけが直せます" : e.message); }
+    K.edit = null; await load(); toast(v.qid ? "答えました。聞くに残ります" : v.old ? "直しました。前の内容も残っています" : "追加しました");
+  }catch(e){ toast(e.message === "manager_only" || e.message === "no_edit" ? "この画面からは直せません" : e.message); }
 }
 
 /* ---------- 画面 ---------- */
@@ -747,7 +771,7 @@ function linesHtml(lines, ordered, key){
 }
 
 function viewHome(){
-  if(VIEWER()) return '<div class="stack">' + viewShiftCard() + viewAround() + '<p class="sub">閲覧用のログインです。シフトとギャラリーの予定が見られます。</p></div>';
+  if(VIEWER()) return '<div class="stack">' + viewShiftCard() + viewAround() + '<p class="sub">閲覧用のログインです。シフトとギャラリーの予定、<a href="#ask">ルボアに聞く</a>が見られます。</p></div>';
   const now = jstNow(), tom = new Date(now.getTime() + 864e5), tw = tom.getUTCDay();
   const tomKind = tw === 1 ? "closed" : (tw === 0 || tw === 6) ? "weekend" : "weekday";
   const po = progress("open"), pc = progress("close");
@@ -756,7 +780,7 @@ function viewHome(){
   const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
   return '<div class="stack">' + viewPunch() + viewRequests(true) + viewMyShift() + viewShiftCard() + viewAround() +
     '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
-    '<a class="card" href="#ask" style="display:block;text-decoration:none;color:inherit"><div class="row"><h2>ルボアに聞く</h2><span class="pill mute">どこにある？決まりは？</span></div><p class="sub" style="margin:6px 0 0">置き場・決まりごと・やり方を探す。見つからなければ質問を送る。' + (IS_MGR() && K.qs.filter(x => !x.answered_at).length ? ' <b style="color:var(--warn)">未回答の質問 ' + K.qs.filter(x => !x.answered_at).length + "件</b>" : "") + "</p></a>" +
+    '<a class="card" href="#ask" style="display:block;text-decoration:none;color:inherit"><div class="row"><h2>ルボアに聞く</h2><span class="pill mute">どこにある？決まりは？</span></div><p class="sub" style="margin:6px 0 0">置き場・決まりごと・やり方を探す。見つからなければ質問を送る。' + (CAN_EDIT() && K.qs.filter(x => !x.answered_at).length ? ' <b style="color:var(--warn)">答えのない質問 ' + K.qs.filter(x => !x.answered_at).length + "件</b>" : "") + "</p></a>" +
     '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
       (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : '<p class="sub">いま足りないものはありません。</p>') +
     "</section>" +
@@ -887,6 +911,7 @@ $("#view").addEventListener("click", e => {
   const ke = e.target.closest("[data-kbedit]"); if(ke){ const k = K.items.find(x => x.id === ke.dataset.kbedit); if(k){ K.edit = { old: k.id, category: k.category, q: k.q, a: k.a, keywords: k.keywords }; render(); window.scrollTo(0, 0); } return; }
   const kr = e.target.closest("[data-kbretire]"); if(kr){ if(confirm("この項目を外しますか？（履歴には残ります）")) (async () => { const who = await needName(); if(!who) return; try{ await db.kbRetire(kr.dataset.kbretire, who); await load(); toast("外しました"); }catch(err){ toast(err.message === "manager_only" ? "管理者だけが直せます" : err.message); } })(); return; }
   const ka = e.target.closest("[data-kbanswer]"); if(ka){ const x = K.qs.find(y => y.id === ka.dataset.kbanswer); if(x){ K.edit = { qid: x.id, body: x.body, q: x.body.replace(/[。！!]+$/, "").slice(0, 200), category: "場所" }; render(); window.scrollTo(0, 0); } return; }
+  const kv = e.target.closest("[data-kbrevert]"); if(kv){ if(confirm("前の内容に戻しますか？")) (async () => { const who = await needName(); if(!who) return; try{ await db.kbRevert(kv.dataset.kbrevert, who); await load(); toast("戻しました"); }catch(err){ toast(err.message === "manager_only" ? "管理者だけが戻せます" : err.message); } })(); return; }
   const kx = e.target.closest("[data-kbcancel]"); if(kx){ K.edit = null; render(); return; }
   const tk = e.target.closest("[data-task]"); if(tk){ addNote("task", tk.dataset.task); return; }
   const ch = e.target.closest("[data-cash]"); if(ch){ addNote("cash", ch.dataset.cash); return; }
