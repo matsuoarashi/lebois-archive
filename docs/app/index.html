@@ -563,7 +563,7 @@ function viewShift(){
 /* ---------- 状態 ---------- */
 const S = { runs: { open: null, close: null }, notes: [], date: bizDate(), loaded: false, error: "" };
 const K = { items: [], qs: [], loaded: false, query: "", cat: "", edit: null };
-const RT = { list: [], done: [], edit: null };
+const RT = { list: [], done: [], edit: null, draft: null };
 
 async function load(){
   S.date = bizDate();
@@ -750,7 +750,7 @@ function rtForm(pre){
   pre = pre || { timing: "営業中", rule: "weekly", weekdays: [], months: RT_SEASONS[0][1] };
   const wd = (pre.weekdays || []).map(Number), ms = (pre.months || []).map(Number);
   const box = (name, v, on, label) => '<label class="chip' + (on ? " on" : "") + '"><input type="checkbox" name="' + name + '" value="' + v + '"' + (on ? " checked" : "") + ' style="position:absolute;opacity:0;pointer-events:none">' + label + "</label>";
-  return '<form id="rtForm" class="stack" style="gap:8px">' + (pre.id ? '<input type="hidden" name="id" value="' + esc(pre.id) + '">' : "") +
+  return '<form id="rtForm" class="stack" style="gap:8px">' + (pre.id ? '<input type="hidden" name="rid" value="' + esc(pre.id) + '">' : "") +
     '<input type="text" name="title" maxlength="100" placeholder="仕事の名前（例：グリストラップ清掃）" value="' + esc(pre.title || "") + '" required>' +
     '<textarea name="detail" maxlength="1000" placeholder="やり方・注意（任意）">' + esc(pre.detail || "") + "</textarea>" +
     '<div class="row" style="gap:8px"><select name="timing" aria-label="いつやるか">' + RT_TIMING.map(x => "<option" + (x === pre.timing ? " selected" : "") + ">" + x + "</option>").join("") + "</select>" +
@@ -773,11 +773,19 @@ function viewRoutine(){
       '<div class="meta"><span>' + (r.updated_by ? esc(r.updated_by) + "・" + fmtTime(r.updated_at).split(" ")[0] : "") + "</span>" +
       (can ? '<span><button type="button" class="btn sm ghost" data-rtedit="' + esc(r.id) + '">直す</button> <button type="button" class="btn sm ghost" data-rtstop="' + esc(r.id) + '">やめる</button></span>' : "") + "</div></div>").join("") + "</div></section>";
   });
-  if(can && !RT.edit) h += '<section class="card"><h2>定期の仕事を追加する</h2>' + rtForm() + "</section>";
+  if(can && !RT.edit) h += '<section class="card"><h2>定期の仕事を追加する</h2>' + rtForm(RT.draft) + "</section>";
   return h + "</div>";
 }
+/** 入力途中の内容を覚えておく（自動の再読み込みで消えないように） */
+function rtCapture(){
+  const f = document.getElementById("rtForm"); if(!f) return;
+  const v = { title: f.elements.title.value, detail: f.elements.detail.value, timing: f.elements.timing.value, rule: f.elements.rule.value,
+    weekdays: Array.from(f.querySelectorAll('input[name="wd"]:checked')).map(x => +x.value),
+    months: Array.from(f.querySelectorAll('input[name="m"]:checked')).map(x => +x.value) };
+  if(RT.edit) Object.assign(RT.edit, v); else RT.draft = v;
+}
 async function rtSubmit(f){
-  const v = { id: f.elements.id ? f.elements.id.value : null, title: f.elements.title.value.trim(), detail: f.elements.detail.value.trim(),
+  const v = { id: f.elements.rid ? f.elements.rid.value : null, title: f.elements.title.value.trim(), detail: f.elements.detail.value.trim(),
     timing: f.elements.timing.value, rule: f.elements.rule.value,
     weekdays: Array.from(f.querySelectorAll('input[name="wd"]:checked')).map(x => +x.value),
     months: Array.from(f.querySelectorAll('input[name="m"]:checked')).map(x => +x.value) };
@@ -786,7 +794,7 @@ async function rtSubmit(f){
   if(!v.months.length) return toast("季節（月）を1つ以上選んでください");
   if(v.rule === "gallery") v.weekdays = [];
   const who = await needName(); if(!who) return;
-  try{ await db.routinePut(v, who); RT.edit = null; await load(); toast(v.id ? "直しました" : "追加しました"); }
+  try{ await db.routinePut(v, who); RT.edit = null; RT.draft = null; await load(); toast(v.id ? "直しました" : "追加しました"); }
   catch(e){ toast(e.message === "no_edit" ? "この画面からは直せません" : e.message); }
 }
 
@@ -1035,11 +1043,11 @@ $("#view").addEventListener("click", e => {
     if(left.length && confirm("残りの" + left.length + "項目をまとめて済みにしますか？\n（あとから1つずつ外せます）")) setChecks(l, left, true, true); return; }
   const rtb = e.target.closest("[data-rt]"); if(rtb){ (async () => { const who = await needName(); if(!who) return; const done = !rtDone(rtb.dataset.rt, rtb.dataset.key);
     try{ await db.routineCheck(rtb.dataset.rt, rtb.dataset.key, done, who); RT.done = await db.routineDone(); render(); if(done) toast("済みにしました"); }catch(err){ toast(err.message === "no_edit" ? "この画面からは押せません" : err.message); } })(); return; }
-  const rpre = e.target.closest("[data-rtpreset]"); if(rpre){ const ms = RT_SEASONS[+rpre.dataset.rtpreset][1]; rpre.closest("form").querySelectorAll('input[name="m"]').forEach(x => { x.checked = ms.indexOf(+x.value) >= 0; x.parentNode.classList.toggle("on", x.checked); }); return; }
-  const rch = e.target.closest("label.chip"); if(rch && rch.closest("#rtForm")){ e.preventDefault(); const x = rch.querySelector("input"); x.checked = !x.checked; rch.classList.toggle("on", x.checked); return; }
+  const rpre = e.target.closest("[data-rtpreset]"); if(rpre){ const ms = RT_SEASONS[+rpre.dataset.rtpreset][1]; rpre.closest("form").querySelectorAll('input[name="m"]').forEach(x => { x.checked = ms.indexOf(+x.value) >= 0; x.parentNode.classList.toggle("on", x.checked); }); rtCapture(); return; }
+  const rch = e.target.closest("label.chip"); if(rch && rch.closest("#rtForm")){ e.preventDefault(); const x = rch.querySelector("input"); x.checked = !x.checked; rch.classList.toggle("on", x.checked); rtCapture(); return; }
   const red = e.target.closest("[data-rtedit]"); if(red){ const r = RT.list.find(x => x.id === red.dataset.rtedit); if(r){ RT.edit = Object.assign({}, r); render(); window.scrollTo(0, 0); } return; }
   const rst = e.target.closest("[data-rtstop]"); if(rst){ if(confirm("この定期の仕事をやめますか？（あとで同じ内容で追加し直せます）")) (async () => { const who = await needName(); if(!who) return; try{ await db.routineStop(rst.dataset.rtstop, who); await load(); toast("やめました"); }catch(err){ toast(err.message); } })(); return; }
-  const rcx = e.target.closest("[data-rtcancel]"); if(rcx){ RT.edit = null; render(); return; }
+  const rcx = e.target.closest("[data-rtcancel]"); if(rcx){ RT.edit = null; RT.draft = null; render(); return; }
   const rs = e.target.closest("[data-resolve]"); if(rs){ resolveNote(rs.dataset.resolve); return; }
   const c = e.target.closest(".chk"); if(c){ toggle(c.dataset.list, c.dataset.id); return; }
   const g = e.target.closest("[data-go]"); if(g){ location.hash = g.dataset.go; return; }
@@ -1062,8 +1070,8 @@ $("#view").addEventListener("submit", async e => {
   if(e.target.id === "taskForm"){ const v = $("#taskIn").value.trim(); if(!v) return $("#taskIn").focus(); if(await addNote("task", v)) $("#taskIn").value = ""; }
   if(e.target.id === "noteForm"){ const v = $("#noteIn").value.trim(); if(!v) return $("#noteIn").focus(); if(await addNote("note", v)) $("#noteIn").value = ""; }
 });
-$("#view").addEventListener("change", e => { if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
-$("#view").addEventListener("input", e => { if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
+$("#view").addEventListener("change", e => { if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
+$("#view").addEventListener("input", e => { if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0,0); });
 document.addEventListener("visibilitychange", () => { if(!document.hidden) load(); });
 setInterval(() => { if(!document.hidden && !(document.activeElement || document.body).matches("input,textarea")) load(); }, 30000);
