@@ -42,13 +42,14 @@ begin
     order by updated_at desc limit 500;
 end $$;
 
--- 足す／直す（管理者だけ）。p_old を渡すと古い行を superseded にして新しい行を作る
+-- 足す／直す（スタッフと管理者。閲覧のみの人は不可）。p_old を渡すと古い行を superseded にして新しい行を作る
+-- 前の内容は消さずに残るので、管理者が lb_kb_revert で戻せる（11/2：現場を知っているスタッフも直せるように変更）
 create or replace function lb_kb_put(p_token uuid, p_category text, p_q text, p_a text, p_keywords text, p_old uuid default null)
 returns uuid
 language plpgsql security definer set search_path = public, extensions as $$
 declare s lb_staff := lb_me(p_token); nid uuid;
 begin
-  if s.role <> 'manager' then raise exception 'manager_only'; end if;
+  if s.role not in ('manager','staff') then raise exception 'no_edit'; end if;
   insert into lb_knowledge (store_id, category, q, a, keywords, supersedes, updated_by)
     values (s.store_id, p_category, p_q, p_a, coalesce(p_keywords,''), p_old, s.name) returning id into nid;
   if p_old is not null then
@@ -66,6 +67,23 @@ begin
   update lb_knowledge set status = 'superseded', updated_at = now(), updated_by = s.name where id = p_id and store_id = s.store_id;
 end $$;
 
+-- 元に戻す（管理者だけ）：直した行なら前の行を復活、外した行ならそのまま復活
+create or replace function lb_kb_revert(p_token uuid, p_id uuid) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare s lb_staff := lb_me(p_token); k lb_knowledge;
+begin
+  if s.role <> 'manager' then raise exception 'manager_only'; end if;
+  select * into k from lb_knowledge where id = p_id and store_id = s.store_id;
+  if not found then raise exception 'not_found'; end if;
+  if k.status = 'approved' and k.supersedes is not null then
+    update lb_knowledge set status = 'superseded', updated_at = now() where id = k.id;
+    update lb_knowledge set status = 'approved', updated_at = now() where id = k.supersedes and store_id = s.store_id;
+  elsif k.status = 'superseded' then
+    update lb_knowledge set status = 'approved', updated_at = now(), updated_by = s.name where id = k.id;
+  end if;
+end $$;
+grant execute on function lb_kb_revert(uuid, uuid) to anon;
+
 -- 質問を送る（誰でも）
 create or replace function lb_ask(p_token uuid, p_body text) returns void
 language plpgsql security definer set search_path = public, extensions as $$
@@ -82,12 +100,12 @@ begin
     order by created_at desc limit 200;
 end $$;
 
--- 答える（管理者だけ）：答えを Knowledge に入れて質問を回答済みにする
+-- 答える（スタッフと管理者）：答えを Knowledge に入れて質問を回答済みにする
 create or replace function lb_answer(p_token uuid, p_qid uuid, p_category text, p_q text, p_a text, p_keywords text) returns uuid
 language plpgsql security definer set search_path = public, extensions as $$
 declare s lb_staff := lb_me(p_token); nid uuid;
 begin
-  if s.role <> 'manager' then raise exception 'manager_only'; end if;
+  if s.role not in ('manager','staff') then raise exception 'no_edit'; end if;
   nid := lb_kb_put(p_token, p_category, p_q, p_a, p_keywords, null);
   update lb_questions set answered_at = now(), answered_by = s.name, knowledge_id = nid where id = p_qid and store_id = s.store_id;
   return nid;
