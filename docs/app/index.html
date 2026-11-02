@@ -135,7 +135,7 @@ input[type=text]{width:100%;min-height:46px;border:1px solid var(--line);border-
 
 /* tab bar */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
-.tabs nav{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.tabs nav{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
 .tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 10px;font-size:11px;color:var(--muted);text-decoration:none;position:relative}
 .tabs a[aria-current="page"]{color:var(--moss);font-weight:700}
 .tabs svg{width:22px;height:22px}
@@ -161,6 +161,8 @@ input[type=text]{width:100%;min-height:46px;border:1px solid var(--line);border-
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--ground);padding:8px 16px;border-radius:10px;font-size:13px;z-index:40;max-width:calc(100% - 32px)}
 .err{color:var(--warn);font-size:13px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+#askIn,select[name=category],input[name=q],input[name=keywords],textarea[name=a]{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+textarea[name=a]{min-height:96px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 6px}
 .chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
 .chip.on{background:var(--moss);color:#fff;border-color:var(--moss);opacity:.85}
@@ -184,6 +186,7 @@ input[type=text]{width:100%;min-height:46px;border:1px solid var(--line);border-
   <a href="#home" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>ホーム</a>
   <a href="#check-open" data-tab="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 9l2 2 4-4M8 16h8"/></svg>チェック</a>
   <a href="#notes" data-tab="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>引き継ぎ<span class="badge" id="badge" hidden></span></a>
+  <a href="#ask" data-tab="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></svg>聞く</a>
   <a href="#manual" data-tab="manual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4z"/><path d="M5 16a4 4 0 0 1 4-4h10"/></svg>マニュアル</a>
 </nav></div>
 
@@ -254,7 +257,13 @@ const remote = {
   async putRun(row){ return rpc("lb_put_run", { p_token: AUTH.token, p_list: row.list, p_date: row.biz_date, p_done: row.done, p_completed: !!row.completed_at }); },
   async getNotes(){ return rpc("lb_get_notes", { p_token: AUTH.token }); },
   async addNote(n){ return rpc("lb_add_note", { p_token: AUTH.token, p_kind: n.kind, p_body: n.body }); },
-  async resolve(id){ return rpc("lb_resolve", { p_token: AUTH.token, p_id: id }); }
+  async resolve(id){ return rpc("lb_resolve", { p_token: AUTH.token, p_id: id }); },
+  async kbList(){ return rpc("lb_kb_list", { p_token: AUTH.token }); },
+  async kbPut(e){ return rpc("lb_kb_put", { p_token: AUTH.token, p_category: e.category, p_q: e.q, p_a: e.a, p_keywords: e.keywords || "", p_old: e.old || null }); },
+  async kbRetire(id){ return rpc("lb_kb_retire", { p_token: AUTH.token, p_id: id }); },
+  async ask(body){ return rpc("lb_ask", { p_token: AUTH.token, p_body: body }); },
+  async questions(){ return rpc("lb_questions_list", { p_token: AUTH.token }); },
+  async answer(qid, e){ return rpc("lb_answer", { p_token: AUTH.token, p_qid: qid, p_category: e.category, p_q: e.q, p_a: e.a, p_keywords: e.keywords || "" }); }
 };
 const local = {
   async getRuns(date){ return mem.get("runs", []).filter(r => r.biz_date === date); },
@@ -270,7 +279,14 @@ const local = {
     return mem.get("notes", []).filter(n => !n.resolved_at || new Date(n.created_at).getTime() >= since).sort((a,b) => b.created_at.localeCompare(a.created_at));
   },
   async addNote(n){ const all = mem.get("notes", []); all.push(Object.assign({ id: String(Date.now()) + Math.random().toString(36).slice(2,6), created_at: new Date().toISOString(), resolved_at: null }, n)); mem.set("notes", all.slice(-300)); },
-  async resolve(id, by){ const all = mem.get("notes", []); const n = all.find(x => x.id === id); if(n){ n.resolved_at = new Date().toISOString(); n.resolved_by = by; } mem.set("notes", all); }
+  async resolve(id, by){ const all = mem.get("notes", []); const n = all.find(x => x.id === id); if(n){ n.resolved_at = new Date().toISOString(); n.resolved_by = by; } mem.set("notes", all); },
+  async kbList(){ return mem.get("kb", []); },
+  async kbPut(e, by){ const all = mem.get("kb", []); const id = String(Date.now()); if(e.old){ const o = all.find(x => x.id === e.old); if(o){ o.status = "superseded"; } }
+    all.unshift({ id, category: e.category, q: e.q, a: e.a, keywords: e.keywords || "", status: "approved", supersedes: e.old || null, updated_by: by, updated_at: new Date().toISOString() }); mem.set("kb", all); return id; },
+  async kbRetire(id, by){ const all = mem.get("kb", []); const o = all.find(x => x.id === id); if(o){ o.status = "superseded"; o.updated_by = by; o.updated_at = new Date().toISOString(); } mem.set("kb", all); },
+  async ask(body, by){ const all = mem.get("qs", []); all.unshift({ id: String(Date.now()), body, staff: by, created_at: new Date().toISOString(), answered_at: null }); mem.set("qs", all); },
+  async questions(){ return mem.get("qs", []); },
+  async answer(qid, e, by){ const id = await this.kbPut(e, by); const all = mem.get("qs", []); const q = all.find(x => x.id === qid); if(q){ q.answered_at = new Date().toISOString(); q.answered_by = by; q.knowledge_id = id; } mem.set("qs", all); return id; }
 };
 const db = LIVE ? remote : local;
 
@@ -295,6 +311,13 @@ function seedDemo(real){
     { id: "d5", kind: "note", body: "チーズケーキ、今日は週末なので2本解凍済みです。", staff: B, created_at: at(y, "19:05"), resolved_at: null },
     { id: "d6", kind: "note", body: "14時にお花の納品予定。受け取りをお願いします。", staff: A, created_at: at(today, "09:55"), resolved_at: null }
   ]);
+  mem.set("kb", [
+    { id: "k1", category: "場所", q: "レシートロール（レジの紙）はどこ？", a: "パントリーの電気のスイッチのところに箱で置いてあります。上から2段目の右端。", keywords: "レシート ロール紙 レジ 紙", status: "approved", updated_by: "LINE履歴", updated_at: at(y, "12:00") },
+    { id: "k2", category: "決まり", q: "ホットコーヒーの作り置きはいつまで？", a: "作ってから1時間半で廃棄（2026/9/20に2時間→1時間半に変更）。", keywords: "ホットコーヒー 廃棄 時間", status: "approved", updated_by: "LINE履歴", updated_at: at(y, "12:00") },
+    { id: "k3", category: "手順", q: "ブレーカーが落ちたら？", a: "分電盤の内扉を開けて「②」のスイッチを上げる。一度右（オフ）に倒してから左に倒すとカチッと入る。内部の銀色の金属部分には触れない（感電）。", keywords: "ブレーカー 停電 分電盤", status: "approved", updated_by: "新史", updated_at: at(y, "15:00") },
+    { id: "k4", category: "ギャラリー", q: "ギャラリーの見学の人が来たら？", a: "予約の有無を確認して2階へ案内。作家さん不在なら電気をつけて見てもらう。詳しい質問は「ギャラリーの公式LINEへ」と案内。", keywords: "見学 ギャラリー 案内", status: "approved", updated_by: "LINE履歴", updated_at: at(y, "12:00") }
+  ]);
+  mem.set("qs", [{ id: "q1", body: "テラスのクッションは雨の日どこにしまう？", staff: Cn, created_at: at(y, "17:30"), answered_at: null }]);
   mem.set("names", R.length ? R : [A, B, Cn]);
   mem.set("seeded", today + (R.length ? "|real" : ""));
 }
@@ -510,11 +533,13 @@ function viewShift(){
 
 /* ---------- 状態 ---------- */
 const S = { runs: { open: null, close: null }, notes: [], date: bizDate(), loaded: false, error: "" };
+const K = { items: [], qs: [], loaded: false, query: "", cat: "", edit: null };
 
 async function load(){
   S.date = bizDate();
   try{
-    const [runs, notes] = await Promise.all([ db.getRuns(S.date), db.getNotes() ]);
+    const [runs, notes, kb, qs] = await Promise.all([ db.getRuns(S.date), db.getNotes(), db.kbList().catch(() => null), db.questions().catch(() => null) ]);
+    if(kb){ K.items = kb; K.loaded = true; } if(qs) K.qs = qs;
     S.runs = { open: null, close: null };
     (runs || []).forEach(r => { S.runs[r.list] = r; });
     S.notes = notes || [];
@@ -632,6 +657,77 @@ function viewRequests(forHome){
   return h;
 }
 
+/* ---------- ルボアに聞く（置き場・決まり・手順。答えられなかった質問は管理者に回って Knowledge になる） ---------- */
+const KB_CATS = ["場所","決まり","手順","設備","ギャラリー","レジ","その他"];
+const IS_MGR = () => !LIVE || AUTH.role === "manager";
+function normK(s){ return String(s || "").normalize("NFKC").toLowerCase().replace(/[\s　]+/g, ""); }
+function tokensK(q){
+  const n = String(q || "").normalize("NFKC").toLowerCase().trim();
+  const parts = n.split(/[\s　,、。？?！!]+/).filter(Boolean);
+  const out = [];
+  parts.forEach(p => { p.replace(/(はどこ|どこに|どこ|って|とは|ですか|ますか|ません|する|して|した|たい|ある|ない|いつ|なに|何|どう|の|は|が|を|に|で|と|も|か)/g, " ").split(/\s+/).forEach(w => { if(w.length >= 2) out.push(w); }); });
+  if(!out.length && n.replace(/[\s　]/g, "").length >= 2) out.push(n.replace(/[\s　]/g, ""));
+  return Array.from(new Set(out));
+}
+function searchK(query, cat){
+  const live = K.items.filter(k => k.status === "approved" && (!cat || k.category === cat));
+  const q = normK(query);
+  if(!q) return live.slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const toks = tokensK(query);
+  return live.map(k => {
+    const hay = normK(k.q + " " + k.keywords + " " + k.a), head = normK(k.q + " " + k.keywords);
+    let sc = 0;
+    if(head.indexOf(q) >= 0) sc += 10; else if(hay.indexOf(q) >= 0) sc += 5;
+    toks.forEach(t => { if(head.indexOf(t) >= 0) sc += 3; else if(hay.indexOf(t) >= 0) sc += 1; });
+    return { k, sc };
+  }).filter(x => x.sc > 0).sort((a, b) => b.sc - a.sc || b.k.updated_at.localeCompare(a.k.updated_at)).map(x => x.k);
+}
+function kbCard(k){
+  const sup = K.items.find(x => x.supersedes === k.id) ? "" : "";
+  return '<div class="note"><p style="margin:0"><b>' + esc(k.q) + '</b></p><p style="margin:0;white-space:pre-wrap;overflow-wrap:anywhere">' + esc(k.a) + '</p><div class="meta"><span><span class="pill mute">' + esc(k.category) + "</span> " + (k.updated_by ? esc(k.updated_by) + "・" : "") + fmtTime(k.updated_at).split(" ")[0] + "更新</span>" +
+    (IS_MGR() ? '<span><button type="button" class="btn sm ghost" data-kbedit="' + esc(k.id) + '">直す</button> <button type="button" class="btn sm ghost" data-kbretire="' + esc(k.id) + '">外す</button></span>' : "") + "</div></div>";
+}
+function kbForm(id, pre){
+  pre = pre || {};
+  return '<form id="' + id + '" class="stack" style="gap:8px">' +
+    (pre.qid ? '<input type="hidden" name="qid" value="' + esc(pre.qid) + '">' : "") + (pre.old ? '<input type="hidden" name="old" value="' + esc(pre.old) + '">' : "") +
+    '<select name="category" aria-label="分類">' + KB_CATS.map(c => '<option' + (c === (pre.category || "場所") ? " selected" : "") + ">" + c + "</option>").join("") + "</select>" +
+    '<input type="text" name="q" maxlength="200" placeholder="見出し（例：水切りネットはどこ？）" value="' + esc(pre.q || "") + '" required>' +
+    '<textarea name="a" maxlength="2000" placeholder="答え" required>' + esc(pre.a || "") + "</textarea>" +
+    '<input type="text" name="keywords" maxlength="300" placeholder="言い換え（空白区切り。例：ネット 三角コーナー）" value="' + esc(pre.keywords || "") + '">' +
+    '<div class="row"><button class="btn sm" type="submit">' + (pre.qid ? "答えて決まりに入れる" : pre.old ? "この内容で置き換える" : "追加する") + "</button>" + (pre.old || pre.qid ? ' <button type="button" class="btn sm ghost" data-kbcancel="1">やめる</button>' : "") + "</div></form>";
+}
+function viewAsk(){
+  const res = searchK(K.query, K.cat), q = K.query.trim();
+  const mine = K.qs.filter(x => x.staff === me());
+  const open = K.qs.filter(x => !x.answered_at);
+  let h = '<div class="stack">' +
+    '<section class="card"><h2>ルボアに聞く</h2><p class="sub">置き場・決まりごと・やり方を探せます。見つからなければ質問を送ると、店長が答えてここに残ります。</p>' +
+    '<input type="search" id="askIn" placeholder="例：レシートの紙 ／ ブレーカー ／ 期限" value="' + esc(K.query) + '" aria-label="検索">' +
+    '<div class="chips" style="margin-top:8px"><button type="button" class="chip' + (!K.cat ? " on" : "") + '" data-kbcat="">すべて</button>' + KB_CATS.map(c => '<button type="button" class="chip' + (K.cat === c ? " on" : "") + '" data-kbcat="' + c + '">' + c + "</button>").join("") + "</div></section>";
+  if(!K.loaded && LIVE) h += '<p class="sub">読み込み中…</p>';
+  else if(res.length) h += '<div class="list">' + res.slice(0, q ? 20 : 40).map(kbCard).join("") + "</div>" + (res.length > (q ? 20 : 40) ? '<p class="sub">ほかにも' + (res.length - (q ? 20 : 40)) + "件。言葉を足して絞ってください。</p>" : "");
+  else h += '<p class="empty">' + (q ? "見つかりませんでした。" : "まだ何も入っていません。") + "</p>";
+  if(q) h += '<section class="card"><p class="sub" style="margin:0 0 8px">答えが見つからないときは、そのまま質問として送れます。店長が答えるとここに残ります。</p><button type="button" class="btn full" data-askq="1">「' + esc(q.slice(0, 60)) + '」を質問として送る</button></section>';
+  if(K.edit) h += '<section class="card"><h2>' + (K.edit.qid ? "質問に答える" : "直す") + "</h2>" + (K.edit.body ? '<p class="sub">' + esc(K.edit.body) + "</p>" : "") + kbForm("kbEditForm", K.edit) + "</section>";
+  if(IS_MGR()){
+    h += '<section class="card"><div class="row"><h2>未回答の質問</h2><span class="pill' + (open.length ? " warn" : " mute") + '">' + open.length + "件</span></div>" +
+      (open.length ? '<div class="list">' + open.map(x => '<div class="note"><p>' + esc(x.body) + '</p><div class="meta"><span>' + esc(x.staff) + "・" + fmtTime(x.created_at) + '</span><button type="button" class="btn sm ghost" data-kbanswer="' + esc(x.id) + '">答える</button></div></div>').join("") + "</div>" : '<p class="sub" style="margin:0">いまはありません。</p>') + "</section>";
+    h += '<details><summary class="sub" style="cursor:pointer;padding:4px 2px">決まりごと・置き場を追加する</summary><div style="margin-top:8px">' + kbForm("kbAddForm") + "</div></details>";
+  }
+  if(mine.length) h += '<section class="card"><h2>自分が送った質問</h2><div class="list">' + mine.slice(0, 10).map(x => '<div class="note"><p>' + esc(x.body) + '</p><div class="meta"><span>' + fmtTime(x.created_at) + "</span>" + (x.answered_at ? '<span class="pill">' + esc(x.answered_by || "") + " が答えました</span>" : '<span class="pill mute">店長に届いています</span>') + "</div></div>").join("") + "</div></section>";
+  return h + "</div>";
+}
+function formVals(f){ const o = {}; ["qid","old","category","q","a","keywords"].forEach(k => { const el = f.elements[k]; if(el) o[k] = el.value.trim(); }); return o; }
+async function kbSubmit(f){
+  const v = formVals(f); if(!v.q || !v.a) return toast("見出しと答えを入れてください");
+  const who = await needName(); if(!who) return;
+  try{
+    if(v.qid) await db.answer(v.qid, v, who); else await db.kbPut(v, who);
+    K.edit = null; await load(); toast(v.qid ? "答えました。決まりごとに残ります" : v.old ? "置き換えました" : "追加しました");
+  }catch(e){ toast(e.message === "manager_only" ? "管理者だけが直せます" : e.message); }
+}
+
 /* ---------- 画面 ---------- */
 function stepPhotos(key){
   const ids = ((C.steps || {})[key] || []).filter(id => (C.shots || {})[id]);
@@ -660,6 +756,7 @@ function viewHome(){
   const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
   return '<div class="stack">' + viewPunch() + viewRequests(true) + viewMyShift() + viewShiftCard() + viewAround() +
     '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
+    '<a class="card" href="#ask" style="display:block;text-decoration:none;color:inherit"><div class="row"><h2>ルボアに聞く</h2><span class="pill mute">どこにある？決まりは？</span></div><p class="sub" style="margin:6px 0 0">置き場・決まりごと・やり方を探す。見つからなければ質問を送る。' + (IS_MGR() && K.qs.filter(x => !x.answered_at).length ? ' <b style="color:var(--warn)">未回答の質問 ' + K.qs.filter(x => !x.answered_at).length + "件</b>" : "") + "</p></a>" +
     '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
       (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : '<p class="sub">いま足りないものはありません。</p>') +
     "</section>" +
@@ -760,13 +857,14 @@ function render(){
   if(VIEWER() && (r.startsWith("check-") || r === "notes")){ location.hash = "#home"; return; }
   if(r.startsWith("check-")){ const l = r.slice(6) === "close" ? "close" : "open"; mem.set("lastList", l); html = viewCheck(l); tab = "check"; }
   else if(r === "notes"){ html = viewNotes(); tab = "notes"; }
+  else if(r === "ask"){ html = viewAsk(); tab = "ask"; }
   else if(r === "shift"){ html = viewShift(); tab = "home"; }
   else if(r === "manual"){ html = viewManual(); tab = "manual"; }
   else if(r.startsWith("m-")){ html = viewManualItem(r.slice(2)); tab = "manual"; }
   else { html = viewHome(); tab = "home"; }
   if(S.error && tab !== "manual") html = '<p class="err">' + esc(S.error) + "。電波を確認して開き直してください。</p>" + html;
   const keep = document.activeElement && document.activeElement.id;
-  const vals = {}; ["shortIn","noteIn","taskIn"].forEach(k => { const el = document.getElementById(k); if(el) vals[k] = el.value; });
+  const vals = {}; ["shortIn","noteIn","taskIn","askIn"].forEach(k => { const el = document.getElementById(k); if(el) vals[k] = el.value; });
   $("#view").innerHTML = html;
   Object.keys(vals).forEach(k => { const el = document.getElementById(k); if(el) el.value = vals[k]; });
   if(keep && document.getElementById(keep) && /In$/.test(keep)) document.getElementById(keep).focus();
@@ -784,6 +882,12 @@ $("#view").addEventListener("click", e => {
   const rs = e.target.closest("[data-resolve]"); if(rs){ resolveNote(rs.dataset.resolve); return; }
   const c = e.target.closest(".chk"); if(c){ toggle(c.dataset.list, c.dataset.id); return; }
   const g = e.target.closest("[data-go]"); if(g){ location.hash = g.dataset.go; return; }
+  const kc = e.target.closest("[data-kbcat]"); if(kc){ K.cat = kc.dataset.kbcat; render(); return; }
+  const aq = e.target.closest("[data-askq]"); if(aq){ (async () => { const who = await needName(); if(!who) return; try{ await db.ask(K.query.trim(), who); K.query = ""; await load(); toast("質問を送りました。答えが入るとここに残ります"); }catch(err){ toast(err.message); } })(); return; }
+  const ke = e.target.closest("[data-kbedit]"); if(ke){ const k = K.items.find(x => x.id === ke.dataset.kbedit); if(k){ K.edit = { old: k.id, category: k.category, q: k.q, a: k.a, keywords: k.keywords }; render(); window.scrollTo(0, 0); } return; }
+  const kr = e.target.closest("[data-kbretire]"); if(kr){ if(confirm("この項目を外しますか？（履歴には残ります）")) (async () => { const who = await needName(); if(!who) return; try{ await db.kbRetire(kr.dataset.kbretire, who); await load(); toast("外しました"); }catch(err){ toast(err.message === "manager_only" ? "管理者だけが直せます" : err.message); } })(); return; }
+  const ka = e.target.closest("[data-kbanswer]"); if(ka){ const x = K.qs.find(y => y.id === ka.dataset.kbanswer); if(x){ K.edit = { qid: x.id, body: x.body, q: x.body.replace(/[。！!]+$/, "").slice(0, 200), category: "場所" }; render(); window.scrollTo(0, 0); } return; }
+  const kx = e.target.closest("[data-kbcancel]"); if(kx){ K.edit = null; render(); return; }
   const tk = e.target.closest("[data-task]"); if(tk){ addNote("task", tk.dataset.task); return; }
   const ch = e.target.closest("[data-cash]"); if(ch){ addNote("cash", ch.dataset.cash); return; }
   if(e.target.id === "copyHand"){ const t = handoverText(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("コピーしました。LINEに貼ってください")).catch(() => prompt("コピーしてLINEに貼ってください", t)); }
@@ -791,9 +895,11 @@ $("#view").addEventListener("click", e => {
 $("#view").addEventListener("submit", async e => {
   e.preventDefault();
   if(e.target.id === "shortForm"){ const v = $("#shortIn").value.trim(); if(!v) return $("#shortIn").focus(); if(await addNote("short", v)) $("#shortIn").value = ""; }
+  if(e.target.id === "kbEditForm" || e.target.id === "kbAddForm"){ kbSubmit(e.target); return; }
   if(e.target.id === "taskForm"){ const v = $("#taskIn").value.trim(); if(!v) return $("#taskIn").focus(); if(await addNote("task", v)) $("#taskIn").value = ""; }
   if(e.target.id === "noteForm"){ const v = $("#noteIn").value.trim(); if(!v) return $("#noteIn").focus(); if(await addNote("note", v)) $("#noteIn").value = ""; }
 });
+$("#view").addEventListener("input", e => { if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0,0); });
 document.addEventListener("visibilitychange", () => { if(!document.hidden) load(); });
 setInterval(() => { if(!document.hidden && !(document.activeElement || document.body).matches("input,textarea")) load(); }, 30000);
