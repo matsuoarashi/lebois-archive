@@ -240,7 +240,7 @@ h1{font-size:20px;margin:2px 0 2px}
 /* チップ：2pxの枠・角12・太字。選ぶと苔色の枠＋淡い苔 */
 .chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}
 .chips.c3{grid-template-columns:repeat(3,minmax(0,1fr))}.chips.c4{grid-template-columns:repeat(4,minmax(0,1fr))}.chips.c5{grid-template-columns:repeat(5,minmax(0,1fr))}
-.chips.wrap{display:flex;flex-wrap:wrap}
+.chips.flow{display:flex;flex-wrap:wrap}
 .chip{border:2px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:8px 6px;font-size:15px;font-weight:700;min-height:52px;line-height:1.3;opacity:1}
 .chip.on{border-color:var(--moss);background:var(--moss-soft);color:var(--moss);opacity:1}
 .chip small{display:block;font-weight:400;font-size:11px;color:var(--muted)}
@@ -292,6 +292,53 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--moss)}
 .pad button{border:2px solid var(--line);font-weight:700}
 .dots i{border-color:var(--moss)}.dots i.f{background:var(--moss)}
 .sg .cell b{color:var(--moss)}
+
+/* ===== 文字の大きさ・改行（オリオンに合わせる） ===== */
+body{font-size:16px;line-height:1.5;line-break:strict;overflow-wrap:anywhere;word-break:normal}
+h1,h2,h3,.card h2,.sectionh h2,.tile b,.btn,.chip,.modes button,.pill{text-wrap:balance}
+p,.sub,.note p,.lines li,.chk .ct>span:first-child{text-wrap:pretty}
+@supports (word-break:auto-phrase){h1,h2,.sub,p,.btn,.chip,.lines li,.chk .ct>span:first-child{word-break:auto-phrase}}
+h1{font-size:18px;font-weight:700;margin:2px 0}
+.sectionh{margin:8px 2px 6px}
+.sectionh h2{font-size:12px;letter-spacing:3px;color:var(--moss);font-weight:700}
+.sectionh span{font-size:12px}
+.card h2 small{letter-spacing:0;color:var(--muted);font-weight:400;font-size:12px}
+.row{font-size:15px}
+.list a,.list button.li{font-size:15px;min-height:54px}
+.list .t small{font-size:12px}
+.chk{font-size:15px;line-height:1.45;padding:12px 14px}
+.chk .by{font-size:12px}
+.note p{font-size:14px;line-height:1.6}
+.note .meta{font-size:12px}
+.lines li{font-size:15px;line-height:1.65}
+table{font-size:14px}th{font-size:12px}
+.tile b{font-size:15px}.tile .num{font-size:26px}
+.back{font-size:13px}
+.empty{font-size:13px}
+.demo{font-size:13px;line-height:1.6}
+.err{font-size:14px}
+.qline{font-size:12px}
+.must{font-size:15px;line-height:1.6}
+.shifts li{font-size:15px}.shifts .tm{font-size:13px}
+.label{font-size:13px}
+textarea{font-size:16px;line-height:1.6}
+.pill{line-height:1.6;white-space:nowrap}
+/* ボタンの文字は1行に。収まらないときだけ折り返す */
+.btn{white-space:nowrap;text-align:center;line-height:1.3}
+.btn.wrapok,.btn.full{white-space:normal}
+.row .btn.sm{flex:none}
+.card>.row>h2,.card>.row>b{min-width:0}
+/* 月の切り替え（オリオンと同じ ◀ 月 ▶） */
+.monthnav{display:flex;justify-content:space-between;align-items:center}
+.monthnav button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:0 16px;font-size:16px;min-height:44px;color:var(--moss)}
+.monthnav button:disabled{opacity:.35}
+.monthnav b{font-size:17px}
+#rtForm .row{flex-wrap:wrap}
+.chips.c6{grid-template-columns:repeat(6,minmax(0,1fr))}
+.chips.sm{gap:6px}.chips.sm .chip{min-height:42px;font-size:14px;padding:6px 2px}
+.chips.flow .chip{padding:6px 14px;flex:0 0 auto}
+label.chip{display:flex;align-items:center;justify-content:center;cursor:pointer;margin:0}#rtForm select{flex:1 1 100%;width:100%;min-width:0}
+select{max-width:100%}
 </style>
 <!--/APP-->
 </head>
@@ -618,7 +665,7 @@ function viewWish(){
   const nDay = Object.keys(W.days).filter(k => W.days[k].kinds.length).length;
   const nTime = Object.keys(W.days).filter(k => W.days[k].kinds.indexOf("時間") >= 0).length;
   const sl = SLOTS.find(x => x[0] === mode);
-  let h = '<div class="stack"><div class="seg" role="group" aria-label="月">' + ms.map(m => '<button type="button" data-wm="' + m + '" aria-pressed="' + (m === W.month) + '">' + esc(monthLabel(m)) + "</button>").join("") + "</div>";
+  let h = '<div class="stack">' + '<div class="monthnav"><button type="button" data-wm="' + addMonth(W.month, -1) + '"' + (W.month <= ms[0] ? " disabled" : "") + ' aria-label="前の月">◀</button><b>' + esc(monthLabel(W.month)) + '</b><button type="button" data-wm="' + addMonth(W.month, 1) + '"' + (W.month >= ms[2] ? " disabled" : "") + ' aria-label="次の月">▶</button></div>';
   h += '<section class="card"><h2>' + esc(monthLabel(W.month)) + "の希望" + (W.sent ? ' <span class="pill">提出済み</span>' : "") + "</h2>" +
     (locked ? '<p class="sub" style="margin:0"><span class="pill warn">公開済み</span> この月のシフトは決まりました。変えたいときは店長に伝えてください。</p><a class="btn ghost" href="#shift">シフトを見る</a>'
       : '<p class="sub" style="margin:0">' + (info.deadline ? "締切 <b>" + esc(dayLab(info.deadline)) + "</b>。" : "") + "入れる枠を選んでから、日をタップしてください。もう一度タップで外せます（1日に2つ付けてもOK）。締切までは何度でも直せます。</p>");
@@ -634,7 +681,7 @@ function viewWish(){
       return '<button type="button" class="' + cls + '"' + (open && !locked ? ' data-wday="' + d.ds + '"' : " disabled") + '><span class="n">' + (+d.ds.slice(8)) + "</span>" +
         (on ? '<span class="k">' + esc(wishMark(v)) + "</span>" : open ? "" : '<span class="k" style="color:var(--muted);font-weight:400">休</span>') + (d.hol && open ? '<span class="k" style="color:var(--warn);font-weight:400">祝</span>' : "") + "</button>"; }).join("") + "</div>" +
     '<div class="legend"><span>◯早番 △中番 ●遅番 ◎終日・数字は時間指定</span><span>点線＝定休日</span></div>';
-  if(!locked) h += '<div class="tools"><button type="button" data-wall="1">営業日を全部「' + esc(mode === "消す" ? "終日" : mode) + '」に</button><button type="button" data-wclear="1">すべて消す</button></div>';
+  if(!locked) h += '<div class="tools"><button type="button" data-wall="1">全部に「' + esc(mode === "消す" ? "終日" : mode) + '」</button><button type="button" data-wclear="1">すべて消す</button></div>';
   h += "</section>";
   h += '<section class="card"><div class="summary"><div><b>' + nDay + '</b><span>出られる日</span></div><div><b>' + nTime + '</b><span>時間指定</span></div><div><b>' + (W.want === "" ? "—" : esc(W.want)) + '</b><span>入りたい日数</span></div></div>' +
     '<label class="label" for="wWant">この月に入りたい日数（目安）</label><input type="number" id="wWant" min="0" max="31" inputmode="numeric" value="' + esc(W.want) + '"' + (locked ? " disabled" : "") + ">" +
@@ -706,7 +753,7 @@ function viewBuild(){
   const per = {}; B.rows.forEach(r => { if(r.staff){ per[r.staff] = per[r.staff] || { days: {}, h: 0 }; per[r.staff].days[r.day] = 1; per[r.staff].h += rowHours(r); } });
   const subm = B.notes.map(n => n.staff), notYet = B.staff.filter(n => subm.indexOf(n) < 0);
   let h = '<div class="stack"><a class="back" href="#home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>ホーム</a><h1>シフトを作る</h1>' +
-    '<div class="seg" role="group" aria-label="月">' + ms.map(m => '<button type="button" data-bm="' + m + '" aria-pressed="' + (m === B.month) + '">' + esc(monthLabel(m)) + "</button>").join("") + "</div>";
+    '<div class="monthnav"><button type="button" data-bm="' + addMonth(B.month, -1) + '"' + (B.month <= ms[0] ? " disabled" : "") + ' aria-label="前の月">◀</button><b>' + esc(monthLabel(B.month)) + '</b><button type="button" data-bm="' + addMonth(B.month, 1) + '"' + (B.month >= ms[2] ? " disabled" : "") + ' aria-label="次の月">▶</button></div>';
   if(B.msg) return h + '<p class="err">' + esc(B.msg) + "</p></div>";
   h += '<section class="card"><div class="row"><h2>' + esc(monthLabel(B.month)) + "</h2>" + (info.published ? '<span class="pill">公開中</span>' : '<span class="pill mute">下書き</span>') + "</div>" +
     '<div class="row" style="gap:8px;justify-content:flex-start;flex-wrap:wrap;margin-top:6px"><label class="label" for="bDead" style="margin:0">希望の締切</label><input type="date" id="bDead" value="' + esc(info.deadline || "") + '" style="width:auto"><button type="button" class="btn sm ghost" id="bDeadSave">締切を保存</button></div>' +
@@ -1210,9 +1257,9 @@ function rtForm(pre){
     '<textarea name="detail" maxlength="1000" placeholder="やり方・注意（任意）">' + esc(pre.detail || "") + "</textarea>" +
     '<div class="row" style="gap:8px"><select name="timing" aria-label="いつやるか">' + RT_TIMING.map(x => "<option" + (x === pre.timing ? " selected" : "") + ">" + x + "</option>").join("") + "</select>" +
     '<select name="rule" id="rtRule" aria-label="出す日"><option value="weekly"' + (pre.rule !== "gallery" ? " selected" : "") + '>曜日で出す</option><option value="gallery"' + (pre.rule === "gallery" ? " selected" : "") + ">ギャラリーの展示入れ替えで出す</option></select></div>" +
-    '<div id="rtWd"' + (pre.rule === "gallery" ? " hidden" : "") + '><p class="sub" style="margin:0 0 4px">曜日（月曜は定休なので出ません）</p><div class="chips">' + [2,3,4,5,6,0].map(d => box("wd", d, wd.indexOf(d) >= 0, WD[d])).join("") + "</div></div>" +
+    '<div id="rtWd"' + (pre.rule === "gallery" ? " hidden" : "") + '><p class="sub" style="margin:0 0 4px">曜日（月曜は定休なので出ません）</p><div class="chips c6 sm">' + [2,3,4,5,6,0].map(d => box("wd", d, wd.indexOf(d) >= 0, WD[d])).join("") + "</div></div>" +
     '<div><p class="sub" style="margin:0 0 4px">季節（出す月）</p><div class="chips" style="margin-bottom:6px">' + RT_SEASONS.map((x, i) => '<button type="button" class="chip" data-rtpreset="' + i + '">' + x[0] + "</button>").join("") + "</div>" +
-    '<div class="chips">' + [1,2,3,4,5,6,7,8,9,10,11,12].map(m => box("m", m, ms.indexOf(m) >= 0, m + "月")).join("") + "</div></div>" +
+    '<div class="chips c6 sm">' + [1,2,3,4,5,6,7,8,9,10,11,12].map(m => box("m", m, ms.indexOf(m) >= 0, m + "月")).join("") + "</div></div>" +
     '<div class="row"><button class="btn sm" type="submit">' + (pre.id ? "この内容で直す" : "追加する") + "</button>" + (pre.id ? ' <button type="button" class="btn sm ghost" data-rtcancel="1">やめる</button>' : "") + "</div></form>";
 }
 function viewRoutine(){
@@ -1302,7 +1349,7 @@ function viewAsk(){
   let h = '<div class="stack">' +
     '<section class="card"><h2>ルボアに聞く</h2><p class="sub">置き場・決まりごと・やり方を探せます。見つからなければ質問を送ると、店長が答えてここに残ります。</p>' +
     '<input type="search" id="askIn" placeholder="例：レシートの紙 ／ ブレーカー ／ 期限" value="' + esc(K.query) + '" aria-label="検索">' +
-    '<div class="chips" style="margin-top:8px"><button type="button" class="chip' + (!K.cat ? " on" : "") + '" data-kbcat="">すべて</button>' + KB_CATS.map(c => '<button type="button" class="chip' + (K.cat === c ? " on" : "") + '" data-kbcat="' + c + '">' + c + "</button>").join("") + "</div></section>";
+    '<div class="chips flow sm" style="margin-top:8px"><button type="button" class="chip' + (!K.cat ? " on" : "") + '" data-kbcat="">すべて</button>' + KB_CATS.map(c => '<button type="button" class="chip' + (K.cat === c ? " on" : "") + '" data-kbcat="' + c + '">' + c + "</button>").join("") + "</div></section>";
   if(!K.loaded && LIVE) h += '<p class="sub">読み込み中…</p>';
   else if(res.length) h += '<div class="list">' + res.slice(0, q ? 20 : 40).map(kbCard).join("") + "</div>" + (res.length > (q ? 20 : 40) ? '<p class="sub">ほかにも' + (res.length - (q ? 20 : 40)) + "件。言葉を足して絞ってください。</p>" : "");
   else h += '<p class="empty">' + (q ? "見つかりませんでした。" : "まだ何も入っていません。") + "</p>";
