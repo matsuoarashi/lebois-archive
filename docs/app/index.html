@@ -43,7 +43,28 @@ button{cursor:pointer}
 
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--ground);display:flex;align-items:center;justify-content:space-between;gap:10px;padding-block:14px 10px}
 .brand{display:flex;flex-direction:column;line-height:1.3;min-width:0}
-.brand b{font-size:17px;letter-spacing:.02em}
+.brand b{font-size:17px;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+.logo{display:inline-block;width:84px;height:19px;background:var(--ink);-webkit-mask:url(logo.png) no-repeat left center/contain;mask:url(logo.png) no-repeat left center/contain;flex:none}
+.logo.lg{width:150px;height:34px}
+.login .logo{margin-bottom:2px}
+/* シフト表（日付×人） */
+.sgw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;padding:0 4px 4px}
+.sg{display:grid;gap:3px;font-size:12px;min-width:max-content}
+.sg>div{border-radius:6px;padding:4px 5px;line-height:1.25}
+.sg .hd{font-weight:700;text-align:center;background:var(--ground);position:sticky;top:0;font-size:12px}
+.sg .hd small{display:block;font-weight:400;color:var(--muted);font-size:10px}
+.sg .dt{position:sticky;left:0;z-index:1;background:var(--surface);border:1px solid var(--line,#ddd);font-variant-numeric:tabular-nums}
+.sg .dt .w0{color:#c0392b}.sg .dt .w6{color:#2c6fb7}
+.sg .dt small{display:block;color:var(--muted);font-size:10px}
+.sg .dt.short{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,var(--surface))}
+.sg .dt.short small.n{color:var(--warn);font-weight:700}
+.sg .cell{border:1px solid var(--line,#ddd);background:var(--surface);min-height:38px;cursor:pointer;text-align:center;font:inherit;color:inherit}
+.sg .cell.short{background:color-mix(in srgb,var(--warn) 6%,var(--surface))}
+.sg .cell b{display:block;color:var(--moss);font-size:12px}
+.sg .cell i{display:block;font-style:normal;color:var(--muted);font-size:10px}
+.sg .cell.none{opacity:.55}
+.pick{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:30;display:flex;align-items:flex-end;justify-content:center}
+.pick .in{background:var(--surface);border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));width:100%;max-width:520px;display:flex;flex-direction:column;gap:10px}
 .brand span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .sps{display:grid;gap:6px;margin:0 0 2px}.sps.two{grid-template-columns:1fr 1fr}.sp{position:relative;display:block;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--line-soft);text-decoration:none}.sp img{display:block;width:100%;height:auto;max-height:240px;object-fit:cover}.sps.two .sp img{height:120px;max-height:none}.hero .sp img{max-height:340px}.sp .tmp{position:absolute;left:6px;bottom:6px;font-size:10.5px;line-height:1.4;background:rgba(0,0,0,.6);color:#fff;padding:2px 7px;border-radius:6px}
 .photos{display:grid;gap:12px}.photos a{display:block;text-decoration:none;color:inherit}.photos img{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--line);background:var(--line-soft)}.photos figure{margin:0}.photos figcaption{font-size:12.5px;color:var(--muted);margin-top:6px}
@@ -176,7 +197,7 @@ textarea[name=a],#rtForm textarea{min-height:96px}
 <!--BODY-->
 <div class="wrap">
   <header class="top">
-    <div class="brand"><b>le bois スタッフ</b><span id="today"></span></div>
+    <div class="brand"><b><span class="logo" role="img" aria-label="le bois"></span>スタッフ</b><span id="today"></span></div>
     <button class="who" id="who" type="button">名前を選ぶ</button>
   </header>
   <p class="demo" id="demo" hidden>お試しモードです。記録はこの端末にだけ残ります。</p>
@@ -371,7 +392,7 @@ function demoShifts(real){
   return days;
 }
 async function loadShifts(force){
-  if(DEMO && (!CFG.shiftUrl || CFG.supabaseUrl)){ SH.days = demoShifts(DEMO_NAMES); Object.assign(SH, demoAround()); SH.updated = "見本"; return; }
+  if(DEMO && (!CFG.shiftUrl || CFG.supabaseUrl)){ SH.days = demoShifts(DEMO_NAMES); Object.assign(SH, demoAround()); SH.updated = "見本"; await mergePlan(); return; }
   if(!CFG.shiftUrl) return;
   if(!force && Date.now() - SH.at < 10*60e3) return;
   SH.at = Date.now();
@@ -385,6 +406,316 @@ async function loadShifts(force){
     SH.days = j.days || []; SH.gallery = j.gallery || null; SH.mot = j.mot || []; SH.updated = j.updated || ""; SH.error = "";
     mem.set("shifts", { days: SH.days, gallery: SH.gallery, mot: SH.mot });
   }catch(e){ SH.error = "シフトを読み込めませんでした（前に読んだ分を表示しています）"; }
+  await mergePlan();
+}
+
+/* ---------- シフトの希望と作成 ----------
+ * 枠は今までどおり（早番・中番・遅番・終日）＋時間指定。
+ * スタッフ：#wish で月ごとに希望を出す。管理者：#build で希望と来店の目安を見ながら組み、公開する。
+ * 公開した月は、ホームの「今日のシフト」「今週を見る」にこちらが出る（シフト登録表より優先）。 */
+const SLOTS = [["早番","10:30","14:30"],["中番","13:30","16:30"],["遅番","14:30","18:30"],["終日","10:30","18:30"]];
+const SLOT_MARK = { "早番": "◯", "中番": "△", "遅番": "●", "終日": "◎", "時間": "※" };
+/* 祝日（月曜が祝日の日は、営業するかを作る画面で選べるように出す） */
+const HOLIDAYS = { "2026-11-03":"文化の日","2026-11-23":"勤労感謝の日","2027-01-01":"元日","2027-01-11":"成人の日","2027-02-11":"建国記念の日","2027-02-23":"天皇誕生日",
+  "2027-03-21":"春分の日","2027-03-22":"振替休日","2027-04-29":"昭和の日","2027-05-03":"憲法記念日","2027-05-04":"みどりの日","2027-05-05":"こどもの日","2027-07-19":"海の日",
+  "2027-08-11":"山の日","2027-09-20":"敬老の日","2027-09-23":"秋分の日","2027-10-11":"スポーツの日","2027-11-03":"文化の日","2027-11-23":"勤労感謝の日" };
+const TIMES = (() => { const o = []; for(let h = 9; h <= 20; h++){ o.push(String(h).padStart(2,"0") + ":00"); if(h < 20) o.push(String(h).padStart(2,"0") + ":30"); } return o; })();
+const HRS = [10,11,12,13,14,15,16,17,18];
+function hm2n(s){ const a = String(s || "").split(":"); return (+a[0] || 0) + (+a[1] || 0) / 60; }
+function monthKey(d){ return bizDate(d).slice(0, 7); }
+function addMonth(m, n){ const a = m.split("-").map(Number); const d = new Date(Date.UTC(a[0], a[1] - 1 + n, 1)); return d.toISOString().slice(0, 7); }
+function monthLabel(m){ const a = m.split("-"); return (+a[0]) + "年" + (+a[1]) + "月"; }
+function monthDays(m){ const a = m.split("-").map(Number), out = []; const n = new Date(Date.UTC(a[0], a[1], 0)).getUTCDate();
+  for(let i = 1; i <= n; i++){ const ds = m + "-" + String(i).padStart(2, "0"); const w = new Date(ds + "T00:00:00Z").getUTCDay(); out.push({ ds, w, hol: HOLIDAYS[ds] || "" }); } return out; }
+function openDay(d){ return d.w !== 1 || !!d.hol; }          // 月曜は定休（祝日の月曜は出す）
+function dayLab(ds){ const d = new Date(ds + "T00:00:00Z"); return (d.getUTCMonth()+1) + "/" + d.getUTCDate() + "（" + WD[d.getUTCDay()] + "）"; }
+function wishText(w){ return w.kinds.map(k => k === "時間" ? (w.t_start || "?") + "〜" + (w.t_end || "?") : k).join("・"); }
+
+/* 保存先（本番は Supabase、お試しはこの端末） */
+Object.assign(remote, {
+  async wishMine(m){ return rpc("lb_wish_mine", { p_token: AUTH.token, p_month: m }); },
+  async wishPut(m, days, want, note){ return rpc("lb_wish_put", { p_token: AUTH.token, p_month: m, p_days: days, p_want: want, p_note: note }); },
+  async wishAll(m){ return rpc("lb_wish_all", { p_token: AUTH.token, p_month: m }); },
+  async monthGet(m){ return rpc("lb_month_get", { p_token: AUTH.token, p_month: m }); },
+  async monthSet(m, deadline, published){ return rpc("lb_month_set", { p_token: AUTH.token, p_month: m, p_deadline: deadline || null, p_published: !!published }); },
+  async planList(from, to){ return rpc("lb_plan_list", { p_token: AUTH.token, p_from: from, p_to: to }); },
+  async planPut(m, rows){ return rpc("lb_plan_put", { p_token: AUTH.token, p_month: m, p_rows: rows }); },
+  async demand(){ return rpc("lb_demand_list", { p_token: AUTH.token }); }
+});
+Object.assign(local, {
+  async wishMine(m, by){ const all = mem.get("wish", []).filter(w => w.month === m && w.staff === by); const n = mem.get("wishNote", []).find(x => x.month === m && x.staff === by);
+    return { days: all, note: n || null, month: mem.get("smonth", {})[m] || null }; },
+  async wishPut(m, days, want, note, by){ const all = mem.get("wish", []).filter(w => !(w.month === m && w.staff === by));
+    days.forEach(d => { if(d.kinds.length) all.push(Object.assign({ month: m, staff: by }, d)); }); mem.set("wish", all);
+    const ns = mem.get("wishNote", []).filter(x => !(x.month === m && x.staff === by)); ns.push({ month: m, staff: by, want_days: want, note, updated_at: new Date().toISOString() }); mem.set("wishNote", ns); },
+  async wishAll(m){ return { days: mem.get("wish", []).filter(w => w.month === m), notes: mem.get("wishNote", []).filter(x => x.month === m) }; },
+  async monthGet(m){ return mem.get("smonth", {})[m] || { published: false }; },
+  async monthSet(m, deadline, published, by){ const all = mem.get("smonth", {}); const o = all[m] || {};
+    all[m] = { deadline: deadline || null, published: !!published, published_at: published ? (o.published ? o.published_at : new Date().toISOString()) : null, published_by: published ? (o.published ? o.published_by : by) : "" }; mem.set("smonth", all); },
+  async planList(from, to){ const ms = mem.get("smonth", {}); return { months: Object.keys(ms).filter(k => ms[k].published), rows: mem.get("plan", []).filter(r => r.day >= from && r.day <= to) }; },
+  async planPut(m, rows){ mem.set("plan", mem.get("plan", []).filter(r => r.day.slice(0, 7) !== m).concat(rows)); },
+  async demand(){ /* お試し用の形だけの数字（本物の売上ではない） */
+    const wk = [0.2,1.5,2,2.5,3,3,2.5,0.8], we = [0.5,4.5,5,6.5,8,8,6.5,1.5], out = [];
+    [0,2,3,4,5,6].forEach(w => (w === 0 || w === 6 ? we : wk).forEach((o, i) => out.push({ weekday: w, hour: 10 + i, orders: o, sales: Math.round(o * 1300) })));
+    return out; }
+});
+function seedWishDemo(names){
+  const m = addMonth(monthKey(), 1); if(mem.get("wishSeed", "") === m) return;
+  const all = [], notes = [];
+  (names || []).slice(0, 8).forEach((nm, i) => {
+    monthDays(m).filter(openDay).forEach((d, j) => {
+      const r = (i * 7 + j * 3) % 10; if(r > 5) return;
+      const kinds = r === 0 ? ["時間"] : r < 3 ? ["終日"] : r === 3 ? ["早番"] : r === 4 ? ["遅番"] : ["早番","遅番"];
+      all.push({ month: m, staff: nm, day: d.ds, kinds, t_start: r === 0 ? "11:00" : "", t_end: r === 0 ? "15:00" : "", comment: "" });
+    });
+    notes.push({ month: m, staff: nm, want_days: 8 + (i % 5), note: i % 3 === 0 ? "見本：月末は少なめだと助かります" : "", updated_at: new Date().toISOString() });
+  });
+  mem.set("wish", all); mem.set("wishNote", notes); mem.set("plan", []); mem.set("smonth", {}); mem.set("wishSeed", m);
+}
+
+/* 公開されたシフトを、シフト表の分より優先して出す */
+async function mergePlan(){
+  if(LIVE && !AUTH.token) return;
+  const from = bizDate(), to = bizDate(new Date(jstNow().getTime() + 13*864e5));
+  let p; try{ p = await db.planList(from, to); }catch(e){ return; }
+  const months = (p && p.months) || []; if(!months.length) return;
+  const byDay = {};
+  (p.rows || []).forEach(r => { if(months.indexOf(r.day.slice(0, 7)) < 0) return; (byDay[r.day] = byDay[r.day] || []).push(r); });
+  const keep = SH.days.filter(d => months.indexOf(d.date.slice(0, 7).replace("/", "-")) < 0);
+  const add = Object.keys(byDay).map(ds => ({ date: ds.replace(/-/g, "/"), fromApp: true,
+    items: byDay[ds].map(r => r.staff ? { slot: r.slot, start: r.t_start, end: r.t_end, name: r.staff } : { slot: r.slot, start: r.t_start, end: r.t_end, vacant: true }) }));
+  SH.days = keep.concat(add).sort((a, b) => a.date.localeCompare(b.date));
+  SH.appMonths = months;
+}
+
+/* ---- スタッフ：希望を出す ---- */
+const W = { month: addMonth(monthKey(), 1), days: {}, want: "", note: "", info: null, loaded: "", busy: false, dirty: false, msg: "" };
+async function loadWish(m){
+  W.month = m || W.month;
+  try{
+    const who = me(); const r = await db.wishMine(W.month, who);
+    W.days = {}; (r.days || []).forEach(d => { W.days[d.day] = { kinds: d.kinds.slice(), t_start: d.t_start || "", t_end: d.t_end || "", comment: d.comment || "" }; });
+    W.want = r.note && r.note.want_days != null ? String(r.note.want_days) : ""; W.note = (r.note && r.note.note) || "";
+    W.sent = r.note ? r.note.updated_at : null;
+    W.info = r.month || { published: false }; W.loaded = W.month; W.dirty = false; W.msg = "";
+  }catch(e){ W.msg = e.message; W.loaded = W.month; }
+  render();
+}
+function viewWish(){
+  if(W.loaded !== W.month){ loadWish(); return '<div class="stack"><p class="sub">読み込み中…</p></div>'; }
+  const m0 = monthKey(), ms = [m0, addMonth(m0, 1), addMonth(m0, 2)];
+  const info = W.info || {}, locked = !!info.published;
+  const days = monthDays(W.month).filter(openDay);
+  const n = Object.keys(W.days).filter(k => W.days[k].kinds.length).length;
+  let h = '<div class="stack"><a class="back" href="#home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>ホーム</a><h1>シフトの希望</h1>' +
+    '<div class="seg" role="group" aria-label="月">' + ms.map(m => '<button type="button" data-wm="' + m + '" aria-pressed="' + (m === W.month) + '">' + esc(monthLabel(m)) + "</button>").join("") + "</div>" +
+    '<section class="card"><p class="sub" style="margin:0">出られる日に、入れる枠を押してください（いくつ選んでも大丈夫です）。押していない日は「入れない」になります。' +
+    (info.deadline ? ' <b>締切 ' + esc(dayLab(info.deadline)) + "</b>" : "") + "</p>" +
+    '<p class="sub" style="margin:6px 0 0">早番 10:30–14:30／中番 13:30–16:30／遅番 14:30–18:30／終日 10:30–18:30。決まった枠に合わないときは「時間」で開始と終了を選べます。</p>' +
+    (W.sent ? '<p class="sub" style="margin:6px 0 0">提出済み（' + esc(fmtTime(W.sent)) + "）。直して出し直せます。</p>" : "") + "</section>";
+  if(locked) h += '<section class="card"><p style="margin:0">' + esc(monthLabel(W.month)) + 'のシフトは公開されました。変えたいときは店長に伝えてください。</p><p style="margin:8px 0 0"><a class="btn sm ghost" href="#shift">シフトを見る</a></p></section>';
+  h += '<section class="card"><div class="row" style="gap:8px;flex-wrap:wrap"><label class="label" for="wWant" style="margin:0">この月に入りたい日数（目安）</label><input type="number" id="wWant" min="0" max="31" inputmode="numeric" value="' + esc(W.want) + '" style="width:80px"' + (locked ? " disabled" : "") + "></div>" +
+    '<label class="label" for="wNote">ひとこと（任意）</label><textarea id="wNote" maxlength="500" placeholder="例：テスト期間の17日〜21日は少なめだと助かります"' + (locked ? " disabled" : "") + ">" + esc(W.note) + "</textarea></section>";
+  h += '<div class="list">' + days.map(d => {
+    const v = W.days[d.ds] || { kinds: [], t_start: "", t_end: "", comment: "" }, on = k => v.kinds.indexOf(k) >= 0;
+    return '<div class="note"><div class="row"><b>' + esc(dayLab(d.ds)) + "</b>" + (d.hol ? '<span class="pill q">' + esc(d.hol) + "</span>" : "") + (v.kinds.length ? '<span class="pill">' + esc(wishText(v)) + "</span>" : '<span class="sub">入れない</span>') + "</div>" +
+      '<div class="chips" style="margin-top:6px">' + SLOTS.map(s => '<button type="button" class="chip' + (on(s[0]) ? " on" : "") + '" data-wd="' + d.ds + '" data-wk="' + s[0] + '"' + (locked ? " disabled" : "") + ">" + SLOT_MARK[s[0]] + s[0] + "</button>").join("") +
+      '<button type="button" class="chip' + (on("時間") ? " on" : "") + '" data-wd="' + d.ds + '" data-wk="時間"' + (locked ? " disabled" : "") + ">※時間</button></div>" +
+      (on("時間") ? '<div class="row" style="gap:6px;margin-top:6px;justify-content:flex-start"><select data-wt="' + d.ds + '" data-f="t_start" aria-label="開始"' + (locked ? " disabled" : "") + ">" + TIMES.map(t => "<option" + (t === (v.t_start || "11:00") ? " selected" : "") + ">" + t + "</option>").join("") + '</select><span>〜</span><select data-wt="' + d.ds + '" data-f="t_end" aria-label="終了"' + (locked ? " disabled" : "") + ">" + TIMES.map(t => "<option" + (t === (v.t_end || "15:00") ? " selected" : "") + ">" + t + "</option>").join("") + "</select></div>" : "") +
+      (v.kinds.length ? '<input type="text" data-wc="' + d.ds + '" maxlength="200" placeholder="この日のメモ（任意）" value="' + esc(v.comment) + '" style="margin-top:6px"' + (locked ? " disabled" : "") + ">" : "") + "</div>";
+  }).join("") + "</div>";
+  if(!locked) h += '<div class="sticky-meter" style="bottom:calc(64px + env(safe-area-inset-bottom));top:auto"><div class="row"><span>' + n + "日 出られる" + (W.dirty ? '・<b style="color:var(--warn)">まだ送っていません</b>' : "") + '</span><button type="button" class="btn" id="wSend"' + (W.busy ? " disabled" : "") + ">" + (W.sent ? "出し直す" : "提出する") + "</button></div></div>";
+  if(W.msg) h += '<p class="err">' + esc(W.msg) + "</p>";
+  return h + "</div>";
+}
+function wishCapture(t){
+  if(t.id === "wWant"){ W.want = t.value; W.dirty = true; return; }
+  if(t.id === "wNote"){ W.note = t.value; W.dirty = true; return; }
+  if(t.dataset.wc){ const v = W.days[t.dataset.wc]; if(v){ v.comment = t.value; W.dirty = true; } return; }
+  if(t.dataset.wt){ const v = W.days[t.dataset.wt]; if(v){ v[t.dataset.f] = t.value; W.dirty = true; } }
+}
+async function sendWish(){
+  if(W.busy) return;
+  const who = await needName(); if(!who) return;
+  const days = Object.keys(W.days).sort().map(ds => { const v = W.days[ds];
+    return { day: ds, kinds: v.kinds, t_start: v.kinds.indexOf("時間") >= 0 ? (v.t_start || "11:00") : "", t_end: v.kinds.indexOf("時間") >= 0 ? (v.t_end || "15:00") : "", comment: v.comment || "" }; }).filter(d => d.kinds.length);
+  const bad = days.find(d => d.kinds.indexOf("時間") >= 0 && hm2n(d.t_end) <= hm2n(d.t_start)); if(bad) return toast(dayLab(bad.day) + " の時間を確かめてください");
+  W.busy = true; render();
+  try{ await db.wishPut(W.month, days, W.want === "" ? null : Math.max(0, Math.min(31, parseInt(W.want, 10) || 0)), W.note.trim(), who); W.busy = false; await loadWish(); toast(monthLabel(W.month) + "の希望を送りました"); }
+  catch(e){ W.busy = false; toast(e.message === "published" ? "この月はもう公開されています。店長に伝えてください" : e.message); render(); }
+}
+
+/* ---- 管理者：シフトを作る ---- */
+const B = { month: addMonth(monthKey(), 1), wishes: [], notes: [], rows: [], info: null, demand: null, cap: Number(mem.get("cap", 5)) || 5, loaded: "", dirty: false, saving: false, open: {}, staff: [], msg: "", mode: mem.get("bmode", "grid"), pick: null };
+async function loadBuild(m){
+  B.month = m || B.month;
+  try{
+    const a = B.month + "-01", z = monthDays(B.month).slice(-1)[0].ds;
+    const [w, p, info, dem, st] = await Promise.all([ db.wishAll(B.month), db.planList(a, z), db.monthGet(B.month), B.demand ? Promise.resolve(B.demand) : db.demand(),
+      LIVE ? rpc("lb_staff_list", {}).catch(() => []) : Promise.resolve(staffNames().map(n => ({ name: n }))) ]);
+    B.wishes = w.days || []; B.notes = w.notes || []; B.rows = ((p && p.rows) || []).filter(r => r.day.slice(0, 7) === B.month).map(r => ({ day: r.day, slot: r.slot, t_start: r.t_start, t_end: r.t_end, staff: r.staff || "" }));
+    B.info = info || { published: false }; B.demand = dem || []; B.staff = (st || []).map(x => x.name).filter(n => n && n !== "岩崎");
+    B.loaded = B.month; B.dirty = false; B.msg = "";
+  }catch(e){ B.msg = e.message === "manager_only" || /manager_only/.test(e.message) ? "管理者だけが開けます" : e.message; B.loaded = B.month; }
+  render();
+}
+/* その日の来店の目安：曜日の平均。祝日は土日の平均 */
+function profileOf(d){
+  const D = B.demand || [], by = w => { const o = {}; D.filter(x => +x.weekday === w).forEach(x => { o[+x.hour] = { orders: +x.orders, sales: +x.sales }; }); return o; };
+  if(d.hol || d.w === 1){ const a = by(6), b = by(0), o = {}; HRS.forEach(h => { const x = a[h] || { orders: 0, sales: 0 }, y = b[h] || { orders: 0, sales: 0 }; o[h] = { orders: (x.orders + y.orders) / 2, sales: (x.sales + y.sales) / 2 }; }); return o; }
+  return by(d.w);
+}
+function needAt(p, h){ const o = (p[h] && p[h].orders) || 0; return Math.max(1, Math.ceil(o / B.cap)); }  // 開店準備・締めも含めて最低1人
+function haveAt(rows, h){ return rows.filter(r => r.staff && hm2n(r.t_start) < h + 1 && hm2n(r.t_end) > h).length; }
+function dayRows(ds){ return B.rows.filter(r => r.day === ds); }
+function rowHours(r){ return Math.max(0, hm2n(r.t_end) - hm2n(r.t_start)); }
+function yen(n){ return n >= 10000 ? (Math.round(n / 1000) / 10) + "万円" : Math.round(n).toLocaleString() + "円"; }
+function viewBuild(){
+  if(LIVE && AUTH.role !== "manager") return '<div class="stack"><p class="sub">管理者だけが開けます。</p></div>';
+  if(B.loaded !== B.month){ loadBuild(); return '<div class="stack"><p class="sub">読み込み中…</p></div>'; }
+  const m0 = monthKey(), ms = [m0, addMonth(m0, 1), addMonth(m0, 2)];
+  const info = B.info || {}, days = monthDays(B.month).filter(d => openDay(d) || dayRows(d.ds).length);
+  const wishBy = {}; B.wishes.forEach(w => { (wishBy[w.day] = wishBy[w.day] || []).push(w); });
+  // 月の合計
+  let sales = 0, hours = 0, short = 0;
+  days.forEach(d => { const p = profileOf(d), rs = dayRows(d.ds); HRS.forEach(hh => { sales += (p[hh] && p[hh].sales) || 0; if(haveAt(rs, hh) < needAt(p, hh)) short++; }); rs.forEach(r => { if(r.staff) hours += rowHours(r); }); });
+  const per = {}; B.rows.forEach(r => { if(r.staff){ per[r.staff] = per[r.staff] || { days: {}, h: 0 }; per[r.staff].days[r.day] = 1; per[r.staff].h += rowHours(r); } });
+  const subm = B.notes.map(n => n.staff), notYet = B.staff.filter(n => subm.indexOf(n) < 0);
+  let h = '<div class="stack"><a class="back" href="#home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>ホーム</a><h1>シフトを作る</h1>' +
+    '<div class="seg" role="group" aria-label="月">' + ms.map(m => '<button type="button" data-bm="' + m + '" aria-pressed="' + (m === B.month) + '">' + esc(monthLabel(m)) + "</button>").join("") + "</div>";
+  if(B.msg) return h + '<p class="err">' + esc(B.msg) + "</p></div>";
+  h += '<section class="card"><div class="row"><h2>' + esc(monthLabel(B.month)) + "</h2>" + (info.published ? '<span class="pill">公開中</span>' : '<span class="pill mute">下書き</span>') + "</div>" +
+    '<div class="row" style="gap:8px;justify-content:flex-start;flex-wrap:wrap;margin-top:6px"><label class="label" for="bDead" style="margin:0">希望の締切</label><input type="date" id="bDead" value="' + esc(info.deadline || "") + '" style="width:auto"><button type="button" class="btn sm ghost" id="bDeadSave">締切を保存</button></div>' +
+    '<p class="sub" style="margin:8px 0 0">希望を出した人 ' + subm.length + "人" + (notYet.length ? "／まだの人：" + esc(notYet.join("、")) : "") + "</p>" +
+    '<p style="margin:8px 0 0;display:flex;gap:6px;flex-wrap:wrap"><span class="pill mute">予想売上 ' + yen(sales) + '</span><span class="pill mute">入っている時間 ' + (Math.round(hours * 10) / 10) + '時間</span><span class="pill mute">人時売上 ' + (hours ? yen(sales / hours) : "—") + "</span>" + (short ? '<span class="pill warn">人が足りない時間 ' + short + "コマ</span>" : "") + "</p>" +
+    '<div class="row" style="gap:8px;justify-content:flex-start;flex-wrap:wrap;margin-top:10px">' +
+      (info.published ? "" : '<button type="button" class="btn sm ghost" id="bAuto">希望から仮に組む</button>') +
+      '<button type="button" class="btn sm' + (B.dirty ? "" : " ghost") + '" id="bSave"' + (B.saving ? " disabled" : "") + ">" + (B.dirty ? "保存する" : "保存済み") + "</button>" +
+      '<button type="button" class="btn sm' + (info.published ? " ghost" : "") + '" id="bPub">' + (info.published ? "公開をやめる" : "公開する") + "</button></div>" +
+    '<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">必要な人数の目安について</summary><p class="sub" style="margin:6px 0 0">同じ曜日の1時間あたりの注文件数（Square の直近半年）から出しています。祝日は土日の平均です。1人で1時間に <input type="number" id="bCap" min="2" max="15" value="' + B.cap + '" style="width:64px"> 件まで対応できるとして計算（最低1人）。季節や展示の初日・最終日は多めに見てください。</p></details></section>';
+  // 人ごと
+  const names = Array.from(new Set(B.staff.concat(Object.keys(per)).concat(subm)));
+  h += '<details class="card"><summary style="cursor:pointer"><b>人ごとの日数</b></summary><table style="margin-top:8px"><thead><tr><th>名前</th><th class="n">希望</th><th class="n">入っている</th><th class="n">時間</th></tr></thead><tbody>' +
+    names.map(n => { const nt = B.notes.find(x => x.staff === n), p = per[n]; const nw = B.wishes.filter(w => w.staff === n).length;
+      return "<tr><td>" + esc(n) + (nt && nt.note ? '<br><span class="sub">' + esc(nt.note) + "</span>" : "") + '</td><td class="n">' + (nt ? (nt.want_days != null ? nt.want_days + "日" : "—") + '<br><span class="sub">出られる' + nw + "日</span>" : '<span class="sub">未提出</span>') + '</td><td class="n">' + (p ? Object.keys(p.days).length + "日" : "0日") + '</td><td class="n">' + (p ? Math.round(p.h * 10) / 10 : 0) + "</td></tr>"; }).join("") +
+    "</tbody></table></details>";
+  h += '<div class="seg" role="group" aria-label="表示">' + [["grid","表（日付×人）"],["day","日ごと（時間帯）"]].map(x => '<button type="button" data-bmode="' + x[0] + '" aria-pressed="' + (B.mode === x[0]) + '">' + x[1] + "</button>").join("") + "</div>";
+  if(B.mode === "grid") return h + gridHtml(days, info, names, wishBy) + (B.pick ? pickHtml(info) : "") + '<p class="sub">公開すると、スタッフのホームの「今日のシフト」「今週を見る」にこの内容が出ます（その月はシフト登録表より優先）。Googleカレンダーへの登録は、今まで通りシフト登録表から行ってください。</p></div>';
+  // 日ごと
+  h += days.map(d => {
+    const p = profileOf(d), rs = dayRows(d.ds), ws = (wishBy[d.ds] || []);
+    const daySales = HRS.reduce((a, hh) => a + ((p[hh] && p[hh].sales) || 0), 0);
+    const gaps = HRS.filter(hh => haveAt(rs, hh) < needAt(p, hh));
+    const used = rs.map(r => r.staff);
+    const strip = '<div style="display:grid;grid-template-columns:repeat(' + HRS.length + ',1fr);gap:2px;margin:8px 0 4px">' + HRS.map(hh => { const need = needAt(p, hh), have = haveAt(rs, hh);
+      const bg = have < need ? "var(--warn)" : have > need + 1 ? "var(--line, #ddd)" : "var(--moss)";
+      return '<div style="text-align:center;font-size:11px;line-height:1.2"><div style="color:var(--muted)">' + hh + '</div><div style="background:' + bg + ';color:#fff;border-radius:4px;padding:2px 0;font-variant-numeric:tabular-nums">' + have + "/" + need + "</div></div>"; }).join("") + "</div>";
+    return '<section class="card sec"><div class="row"><b>' + esc(dayLab(d.ds)) + "</b>" + (d.hol ? '<span class="pill q">' + esc(d.hol) + "</span>" : "") + '<span class="sub">予想 ' + yen(daySales) + "</span>" + (gaps.length ? '<span class="pill warn">足りない</span>' : rs.length ? '<span class="pill">OK</span>' : "") + "</div>" + strip +
+      '<p class="sub" style="margin:0 0 6px">数字は「入っている人数／必要な人数」（時台）。</p>' +
+      (rs.length ? '<ul class="shifts">' + rs.map(r => { const i = B.rows.indexOf(r);
+        return '<li><span class="pill mute">' + esc(r.slot) + '</span><span class="tm">' + esc(r.t_start) + "〜" + esc(r.t_end) + "</span>" + (r.staff ? '<span class="nm">' + esc(r.staff) + "</span>" : '<span class="gap">人が足りません</span>') +
+          (info.published ? "" : '<button type="button" class="btn sm ghost" data-bdel="' + i + '" aria-label="外す" style="margin-left:auto">外す</button>') + "</li>"; }).join("") + "</ul>" : '<p class="sub" style="margin:0">まだ誰も入っていません。</p>') +
+      (ws.length ? '<p class="sub" style="margin:8px 0 4px">希望している人（押すと入ります）</p><div class="chips">' + ws.map(w => { const inn = used.indexOf(w.staff) >= 0;
+        return w.kinds.map(k => '<button type="button" class="chip' + (inn ? " on" : "") + '" data-badd="' + d.ds + '" data-bs="' + esc(w.staff) + '" data-bk="' + esc(k) + '" data-bt="' + esc(w.t_start + "-" + w.t_end) + '"' + (info.published || inn ? " disabled" : "") + ' title="' + esc(w.comment || "") + '">' + esc(w.staff) + " " + esc(k === "時間" ? w.t_start + "〜" + w.t_end : SLOT_MARK[k] + k) + (w.comment ? "＊" : "") + "</button>").join(""); }).join("") + "</div>" +
+        (ws.some(w => w.comment) ? '<p class="sub" style="margin:4px 0 0">' + ws.filter(w => w.comment).map(w => esc(w.staff) + "：" + esc(w.comment)).join("／") + "</p>" : "") : '<p class="sub" style="margin:8px 0 0">この日の希望はありません。</p>') +
+      (info.published ? "" : '<div class="row" style="gap:6px;justify-content:flex-start;flex-wrap:wrap;margin-top:8px"><select data-bslot="' + d.ds + '" aria-label="枠">' + SLOTS.map(s => "<option>" + s[0] + "</option>").join("") + '</select><select data-bname="' + d.ds + '" aria-label="名前"><option value="">（人が足りない枠）</option>' + names.map(n => "<option>" + esc(n) + "</option>").join("") + '</select><button type="button" class="btn sm ghost" data-bplus="' + d.ds + '">＋足す</button></div>') +
+      "</section>";
+  }).join("");
+  return h + '<p class="sub">公開すると、スタッフのホームの「今日のシフト」「今週を見る」にこの内容が出ます（その月はシフト登録表より優先）。Googleカレンダーへの登録は、今まで通りシフト登録表から行ってください。</p></div>';
+}
+
+/* 表（日付×人）：縦に日付、横に人。マスを押すと枠を選べる */
+const SHORT = { "早番": "早", "中番": "中", "遅番": "遅", "終日": "終日" };
+function gridHtml(days, info, names, wishBy){
+  const cols = names.filter(n => B.wishes.some(w => w.staff === n) || B.rows.some(r => r.staff === n) || B.notes.some(x => x.staff === n));
+  if(!cols.length) return '<p class="empty">まだ誰も希望を出していません。日ごとの表示から「＋足す」で入れることもできます。</p>';
+  const per = n => new Set(B.rows.filter(r => r.staff === n).map(r => r.day)).size;
+  let g = '<div class="sgw"><div class="sg" style="grid-template-columns:92px repeat(' + cols.length + ',58px)"><div class="hd"></div>' +
+    cols.map(n => { const nt = B.notes.find(x => x.staff === n); return '<div class="hd">' + esc(n) + "<small>" + per(n) + "日" + (nt && nt.want_days != null ? "／" + nt.want_days : "") + "</small></div>"; }).join("");
+  days.forEach(d => {
+    const p = profileOf(d), rs = dayRows(d.ds), short = HRS.filter(hh => haveAt(rs, hh) < needAt(p, hh)).length;
+    const peak = Math.max.apply(null, HRS.map(hh => needAt(p, hh)));
+    const vac = rs.filter(r => !r.staff).length;
+    g += '<div class="dt' + (short ? " short" : "") + '"><b class="w' + d.w + '">' + esc(dayLab(d.ds)) + "</b>" + (d.hol ? "<small>" + esc(d.hol) + "</small>" : "") +
+      '<small class="n">' + (short ? "不足" + short + "時間" : rs.filter(r => r.staff).length + "人・OK") + "</small><small>最大" + peak + "人" + (vac ? "・空き枠" + vac : "") + "</small></div>";
+    cols.forEach(n => {
+      const r = rs.find(x => x.staff === n), w = (wishBy[d.ds] || []).find(x => x.staff === n);
+      const wt = w ? w.kinds.map(k => k === "時間" ? w.t_start.replace(":00","") + "-" + w.t_end.replace(":00","") : SLOT_MARK[k] + SHORT[k]).join(" ") : "";
+      g += '<button type="button" class="cell' + (short ? " short" : "") + (!r && !w ? " none" : "") + '" data-gc="' + d.ds + '" data-gn="' + esc(n) + '"' + (info.published ? " disabled" : "") + ">" +
+        (r ? "<b>" + esc(SHORT[r.slot] || (r.t_start + "-" + r.t_end)) + "</b>" : "") + (wt ? "<i>" + esc(wt) + "</i>" : (r ? "" : "<i>—</i>")) + "</button>";
+    });
+  });
+  return g + "</div></div>" +
+    '<p class="sub" style="margin:6px 0 0">太字＝入っている枠、小さい字＝希望（◯早 △中 ●遅 ◎終日、数字は時間指定）。赤い日は、時間帯で見ると人が足りません（「日ごと」で何時が足りないか見られます）。マスを押すと枠を選べます。</p>';
+}
+function pickHtml(info){
+  const ds = B.pick.ds, n = B.pick.n, cur = B.rows.find(r => r.day === ds && r.staff === n), w = B.wishes.find(x => x.day === ds && x.staff === n);
+  const ts = (cur && cur.t_start) || (w && w.t_start) || "11:00", te = (cur && cur.t_end) || (w && w.t_end) || "15:00";
+  return '<div class="pick" data-pclose="1"><div class="in"><div class="row"><b>' + esc(dayLab(ds)) + " " + esc(n) + '</b><button type="button" class="btn sm ghost" data-pclose="1">閉じる</button></div>' +
+    '<p class="sub" style="margin:0">希望：' + (w ? esc(wishText(w)) + (w.comment ? "（" + esc(w.comment) + "）" : "") : "なし") + (cur ? "　いま：" + esc(cur.slot) + " " + esc(cur.t_start) + "〜" + esc(cur.t_end) : "") + "</p>" +
+    '<div class="chips">' + SLOTS.map(sl => '<button type="button" class="chip' + (w && w.kinds.indexOf(sl[0]) >= 0 ? " on" : "") + '" data-pset="' + sl[0] + '">' + SLOT_MARK[sl[0]] + sl[0] + " " + sl[1] + "–" + sl[2] + "</button>").join("") + "</div>" +
+    '<div class="row" style="gap:6px;justify-content:flex-start"><select id="pS" aria-label="開始">' + TIMES.map(t => "<option" + (t === ts ? " selected" : "") + ">" + t + "</option>").join("") + '</select><span>〜</span><select id="pE" aria-label="終了">' + TIMES.map(t => "<option" + (t === te ? " selected" : "") + ">" + t + "</option>").join("") + '</select><button type="button" class="btn sm ghost" data-pset="時間">この時間で入れる</button></div>' +
+    (cur ? '<button type="button" class="btn ghost" data-pdel="1">外す</button>' : "") + "</div></div>";
+}
+function pickSet(slot){
+  const ds = B.pick.ds, n = B.pick.n;
+  B.rows = B.rows.filter(r => !(r.day === ds && r.staff === n));
+  if(slot === "時間"){ const a = (document.getElementById("pS") || {}).value, z = (document.getElementById("pE") || {}).value; if(hm2n(z) <= hm2n(a)) return toast("時間を確かめてください"); bAdd(ds, "時間", n, a, z); }
+  else if(slot) bAdd(ds, slot, n);
+  else { B.dirty = true; }
+  B.pick = null; render();
+}
+function bAdd(ds, slot, staff, ts, te){
+  const s = SLOTS.find(x => x[0] === slot);
+  B.rows.push({ day: ds, slot, t_start: ts || (s ? s[1] : "11:00"), t_end: te || (s ? s[2] : "15:00"), staff: staff || "" });
+  B.rows.sort((a, b) => (a.day + a.t_start).localeCompare(b.day + b.t_start)); B.dirty = true; render();
+}
+/* 希望から仮に組む：足りない時間が多い日から、希望日数に届いていない人を優先して1人ずつ入れる */
+function autoBuild(){
+  const days = monthDays(B.month).filter(openDay);
+  const cnt = {}; B.rows.forEach(r => { if(r.staff){ cnt[r.staff] = cnt[r.staff] || {}; cnt[r.staff][r.day] = 1; } });
+  const want = n => { const x = B.notes.find(y => y.staff === n); return x && x.want_days != null ? x.want_days : 99; };
+  const have = n => Object.keys(cnt[n] || {}).length;
+  let added = 0;
+  days.forEach(d => {
+    const p = profileOf(d);
+    for(let guard = 0; guard < 4; guard++){
+      const rs = dayRows(d.ds); const gaps = HRS.filter(hh => haveAt(rs, hh) < needAt(p, hh)); if(!gaps.length) break;
+      const used = rs.map(r => r.staff);
+      const cands = B.wishes.filter(w => w.day === d.ds && used.indexOf(w.staff) < 0 && have(w.staff) < want(w.staff));
+      let best = null;
+      cands.forEach(w => w.kinds.forEach(k => { const s = SLOTS.find(x => x[0] === k); const ts = k === "時間" ? w.t_start : s[1], te = k === "時間" ? w.t_end : s[2];
+        const cover = gaps.filter(hh => hm2n(ts) < hh + 1 && hm2n(te) > hh).length;
+        const score = cover * 10 - have(w.staff) - rowHours({ t_start: ts, t_end: te }) * 0.5;
+        if(cover && (!best || score > best.score)) best = { score, w, k, ts, te }; }));
+      if(!best) break;
+      B.rows.push({ day: d.ds, slot: best.k, t_start: best.ts, t_end: best.te, staff: best.w.staff });
+      cnt[best.w.staff] = cnt[best.w.staff] || {}; cnt[best.w.staff][d.ds] = 1; added++;
+    }
+  });
+  B.rows.sort((a, b) => (a.day + a.t_start).localeCompare(b.day + b.t_start));
+  B.dirty = true; render(); toast(added ? added + "枠を仮に入れました。確かめてから保存してください" : "足せる希望がありませんでした");
+}
+async function saveBuild(){
+  if(B.saving) return; B.saving = true; render();
+  try{ await db.planPut(B.month, B.rows.map(r => ({ day: r.day, slot: r.slot, t_start: r.t_start, t_end: r.t_end, staff: r.staff }))); B.dirty = false; toast("保存しました"); }
+  catch(e){ toast(e.message); }
+  B.saving = false; render();
+}
+async function publishBuild(){
+  const pub = !(B.info && B.info.published);
+  if(pub && !confirm(monthLabel(B.month) + "のシフトを公開しますか？\nスタッフのホームに出ます。")) return;
+  if(!pub && !confirm("公開をやめますか？\nスタッフのホームはシフト登録表の内容に戻ります。")) return;
+  const who = await needName(); if(!who) return;
+  try{ if(B.dirty) await saveBuild(); await db.monthSet(B.month, (B.info && B.info.deadline) || null, pub, who); B.info = await db.monthGet(B.month); toast(pub ? "公開しました" : "公開をやめました"); await loadShifts(true); }
+  catch(e){ toast(e.message); }
+  render();
+}
+function viewWishCard(){
+  if(VIEWER()) return "";
+  const nm = addMonth(monthKey(), 1);
+  return '<section class="card"><div class="row"><h2>シフト</h2><span>' + '<a class="btn sm ghost" href="#wish">希望を出す</a>' + (IS_MGR() ? ' <a class="btn sm ghost" href="#build">作る</a>' : "") + "</span></div>" +
+    '<p class="sub" style="margin:0">' + esc(monthLabel(nm)) + "の希望をアプリから出せます。</p></section>";
 }
 
 
@@ -485,7 +816,7 @@ function dayLabel(ds){ const d = new Date(ds.replace(/\//g, "-") + "T00:00:00Z")
 /* ---------- ログイン画面 ---------- */
 const LG = { list: null, pick: null, pin: "", first: "", step: "pick", msg: "", busy: false };
 function viewLogin(){
-  if(!LG.list){ loadStaffList(); return '<div class="login"><h1>le bois スタッフ</h1><p class="sub">読み込み中…</p></div>'; }
+  if(!LG.list){ loadStaffList(); return '<div class="login"><p class="sub">読み込み中…</p></div>'; }
   const p = LG.list.find(x => x.id === LG.pick);
   let h = '<div class="login"><h1>ログイン</h1><p class="sub">自分の名前を選んで、4桁の番号を入れてください。</p>' +
     '<div class="names" id="lgNames">' + LG.list.map(x => '<button type="button" data-id="' + esc(x.id) + '" class="' + (x.id === LG.pick ? "on" : "") + '">' + esc(x.name) + "</button>").join("") + "</div>";
@@ -556,7 +887,7 @@ function viewShift(){
   const today = bizDate().replace(/-/g, "/");
   return '<div class="stack"><a class="back" href="#home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>ホーム</a><h1>シフト（2週間）</h1>' +
     (SH.days.length ? SH.days.map(d => '<section class="card sec"><div class="dayh' + (d.date === today ? " today" : "") + '"><b>' + esc(dayLabel(d.date)) + "</b>" + (d.date === today ? '<span class="pill">今日</span>' : "") + (d.items.some(i => i.vacant) ? '<span class="pill warn">人が足りない枠あり</span>' : "") + "</div>" + shiftItems(d.items) + "</section>").join("") : '<p class="empty">表示できるシフトがありません。</p>') +
-    '<p class="sub">シフトの元はシフト登録表です。変更は店長が表で行い、15分ほどでここに出ます。月曜は定休日です。' + (SH.updated && SH.updated !== "見本" ? "（最終取込 " + esc(SH.updated) + "）" : "") + "</p>" +
+    '<p class="sub">' + ((SH.appMonths || []).length ? (SH.appMonths.map(monthLabel).join("・") + "はアプリで作ったシフトです。それ以外の月は") : "") + 'シフト登録表から読んでいます（変更は15分ほどでここに出ます）。月曜は定休日です。' + (SH.updated && SH.updated !== "見本" ? "（最終取込 " + esc(SH.updated) + "）" : "") + "</p>" +
     (SH.error ? '<p class="sub">' + esc(SH.error) + "</p>" : "") + "</div>";
 }
 
@@ -915,7 +1246,7 @@ function viewHome(){
   const shorts = S.notes.filter(n => n.kind === "short" && !n.resolved_at);
   const lastNote = S.notes.find(n => n.kind === "note");
   const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
-  return '<div class="stack">' + viewPunch() + viewRequests(true) + viewRoutineToday() + viewMyShift() + viewShiftCard() + viewAround() +
+  return '<div class="stack">' + viewPunch() + viewRequests(true) + viewRoutineToday() + viewMyShift() + viewShiftCard() + viewWishCard() + viewAround() +
     '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
     '<a class="card" href="#ask" style="display:block;text-decoration:none;color:inherit"><div class="row"><h2>ルボアに聞く</h2><span class="pill mute">どこにある？決まりは？</span></div><p class="sub" style="margin:6px 0 0">置き場・決まりごと・やり方を探す。見つからなければ質問を送る。' + (CAN_EDIT() && K.qs.filter(x => !x.answered_at).length ? ' <b style="color:var(--warn)">答えのない質問 ' + K.qs.filter(x => !x.answered_at).length + "件</b>" : "") + "</p></a>" +
     '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
@@ -1021,13 +1352,17 @@ function render(){
   else if(r === "ask"){ html = viewAsk(); tab = "ask"; }
   else if(r === "routine"){ if(VIEWER()){ location.hash = "#home"; return; } html = viewRoutine(); tab = "home"; }
   else if(r === "shift"){ html = viewShift(); tab = "home"; }
+  else if(r === "wish"){ if(VIEWER()){ location.hash = "#home"; return; } html = viewWish(); tab = "home"; }
+  else if(r === "build"){ html = viewBuild(); tab = "home"; }
   else if(r === "manual"){ html = viewManual(); tab = "manual"; }
   else if(r.startsWith("m-")){ html = viewManualItem(r.slice(2)); tab = "manual"; }
   else { html = viewHome(); tab = "home"; }
   if(S.error && tab !== "manual") html = '<p class="err">' + esc(S.error) + "。電波を確認して開き直してください。</p>" + html;
   const keep = document.activeElement && document.activeElement.id;
   const vals = {}; ["shortIn","noteIn","taskIn","askIn"].forEach(k => { const el = document.getElementById(k); if(el) vals[k] = el.value; });
+  const sgw = document.querySelector(".sgw"), sgx = sgw ? sgw.scrollLeft : 0;
   $("#view").innerHTML = html;
+  if(sgx){ const n = document.querySelector(".sgw"); if(n) n.scrollLeft = sgx; }
   Object.keys(vals).forEach(k => { const el = document.getElementById(k); if(el) el.value = vals[k]; });
   if(keep && document.getElementById(keep) && /In$/.test(keep)) document.getElementById(keep).focus();
   document.querySelectorAll(".tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.tab === tab ? "page" : "false"));
@@ -1038,6 +1373,27 @@ function render(){
 
 $("#view").addEventListener("click", e => {
   const pb = e.target.closest(".punch"); if(pb){ doPunch(pb.dataset.a); return; }
+  const wm = e.target.closest("[data-wm]"); if(wm){ if(W.dirty && !confirm("まだ送っていない変更があります。別の月に移りますか？")) return; W.month = wm.dataset.wm; W.loaded = ""; render(); return; }
+  const wk = e.target.closest("[data-wk]"); if(wk){ const ds = wk.dataset.wd, k = wk.dataset.wk; const v = W.days[ds] || { kinds: [], t_start: "", t_end: "", comment: "" };
+    const i = v.kinds.indexOf(k); if(i >= 0) v.kinds.splice(i, 1); else { v.kinds.push(k); if(k === "時間" && !v.t_start){ v.t_start = "11:00"; v.t_end = "15:00"; } }
+    W.days[ds] = v; W.dirty = true; render(); return; }
+  if(e.target.id === "wSend"){ sendWish(); return; }
+  const bm = e.target.closest("[data-bm]"); if(bm){ if(B.dirty && !confirm("保存していない変更があります。別の月に移りますか？")) return; B.month = bm.dataset.bm; B.loaded = ""; render(); return; }
+  if(e.target.id === "bDeadSave"){ (async () => { const who = await needName(); if(!who) return; const v = (document.getElementById("bDead") || {}).value || null;
+    try{ await db.monthSet(B.month, v, !!(B.info && B.info.published), who); B.info = await db.monthGet(B.month); toast("締切を保存しました"); render(); }catch(err){ toast(err.message); } })(); return; }
+  if(e.target.id === "bAuto"){ autoBuild(); return; }
+  const bmo = e.target.closest("[data-bmode]"); if(bmo){ B.mode = bmo.dataset.bmode; mem.set("bmode", B.mode); render(); return; }
+  const gc = e.target.closest("[data-gc]"); if(gc){ B.pick = { ds: gc.dataset.gc, n: gc.dataset.gn }; render(); return; }
+  const ps = e.target.closest("[data-pset]"); if(ps){ pickSet(ps.dataset.pset); return; }
+  if(e.target.closest("[data-pdel]")){ pickSet(null); return; }
+  if(e.target.dataset && e.target.dataset.pclose){ B.pick = null; render(); return; }
+  if(e.target.id === "bSave"){ saveBuild(); return; }
+  if(e.target.id === "bPub"){ publishBuild(); return; }
+  const bd = e.target.closest("[data-bdel]"); if(bd){ B.rows.splice(+bd.dataset.bdel, 1); B.dirty = true; render(); return; }
+  const ba2 = e.target.closest("[data-badd]"); if(ba2){ const t = ba2.dataset.bt.split("-"); const k = ba2.dataset.bk;
+    bAdd(ba2.dataset.badd, k, ba2.dataset.bs, k === "時間" ? t[0] : "", k === "時間" ? t[1] : ""); return; }
+  const bp = e.target.closest("[data-bplus]"); if(bp){ const ds = bp.dataset.bplus; const sl = document.querySelector('[data-bslot="' + ds + '"]'), nm = document.querySelector('[data-bname="' + ds + '"]');
+    bAdd(ds, sl.value, nm.value); return; }
   const bk = e.target.closest(".bulk"); if(bk){ setChecks(bk.dataset.list, bk.dataset.ids.split(","), true, true); return; }
   const ba = e.target.closest(".bulk-all"); if(ba){ const l = ba.dataset.list, m = doneMap(l), left = allItems(l).filter(i => !m[i]);
     if(left.length && confirm("残りの" + left.length + "項目をまとめて済みにしますか？\n（あとから1つずつ外せます）")) setChecks(l, left, true, true); return; }
@@ -1070,8 +1426,8 @@ $("#view").addEventListener("submit", async e => {
   if(e.target.id === "taskForm"){ const v = $("#taskIn").value.trim(); if(!v) return $("#taskIn").focus(); if(await addNote("task", v)) $("#taskIn").value = ""; }
   if(e.target.id === "noteForm"){ const v = $("#noteIn").value.trim(); if(!v) return $("#noteIn").focus(); if(await addNote("note", v)) $("#noteIn").value = ""; }
 });
-$("#view").addEventListener("change", e => { if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
-$("#view").addEventListener("input", e => { if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
+$("#view").addEventListener("change", e => { wishCapture(e.target); if(e.target.id === "bCap"){ B.cap = Math.max(2, Math.min(15, +e.target.value || 5)); mem.set("cap", B.cap); render(); } if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
+$("#view").addEventListener("input", e => { wishCapture(e.target); if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0,0); });
 document.addEventListener("visibilitychange", () => { if(!document.hidden) load(); });
 setInterval(() => { if(!document.hidden && !(document.activeElement || document.body).matches("input,textarea")) load(); }, 30000);
@@ -1085,7 +1441,7 @@ updateWho();
 render();
 if(DEMO){
   (CFG.supabaseUrl ? rpc("lb_staff_list", {}).then(l => { DEMO_NAMES = (l || []).map(x => x.name); }).catch(() => {}) : Promise.resolve())
-  .then(() => loadShifts(true)).then(() => { const n = staffNames(); if(mem.get("seeded", "") !== bizDate() + (n.length ? "|real" : "")) seedDemo(n); return load(); }).then(render);
+  .then(() => { seedWishDemo(DEMO_NAMES.length ? DEMO_NAMES : ["はな","けい","ゆう","そら","りん"]); B.loaded = ""; W.loaded = ""; return loadShifts(true); }).then(() => { const n = staffNames(); if(mem.get("seeded", "") !== bizDate() + (n.length ? "|real" : "")) seedDemo(n); return load(); }).then(render);
   loadPunch(true).then(render);
 }else if(!LIVE || AUTH.token){
   load();
