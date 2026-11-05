@@ -997,6 +997,35 @@ function galleryTag(g, d){
   if(g.end === d) return '<span class="pill warn">最終日・撤収</span>';
   return "";
 }
+/* ---- momo の引取（製造予定表の「製造品目」から。数は酒井シェフが入れる）---- */
+const PK = { list: null, at: 0 };
+async function loadPickups(force){
+  if(!force && PK.at && Date.now() - PK.at < 10 * 60e3) return;
+  PK.at = Date.now();
+  try{
+    if(DEMO || !LIVE){
+      const d0 = jstNow(), add = n => ymdS(new Date(d0.getTime() + n * 864e5)).replace(/\//g, "-");
+      const nx = [1,2,3,4,5,6,7].map(n => ({ n, wd: new Date(add(n) + "T00:00:00").getDay() })).filter(x => x.wd === 3 || x.wd === 6);
+      PK.list = nx.map((x, i) => ({ date: add(x.n), text: i ? "引取（数はまだ）" : "チーズケーキ 4本・シフォンケーキ 1ロール・クロックムッシュ 8食", blank: !!i }));
+      return;
+    }
+    if(!CFG.nippoUrl || !AUTH.token){ PK.at = 0; return; }
+    const r = await fetch(CFG.nippoUrl, { method: "POST", body: JSON.stringify({ token: AUTH.token, action: "pickups" }) });
+    const j = await r.json(); if(j.ok) PK.list = j.pickups || [];
+  }catch(e){ /* 取れなければ出さない */ }
+}
+function viewPickupCard(){
+  if(!PK.list || !PK.list.length) return "";
+  const today = ymdS(jstNow()).replace(/\//g, "-");
+  const rows = PK.list.slice(0, 3).map(p => {
+    const d = new Date(p.date + "T00:00:00"), lab = (d.getMonth() + 1) + "/" + d.getDate() + "（" + WD[d.getDay()] + "）";
+    const diff = Math.round((d - new Date(today + "T00:00:00")) / 864e5);
+    const when = diff === 0 ? '<span class="pill">今日</span> ' : diff === 1 ? '<span class="pill">明日</span> ' : "";
+    return '<div style="padding:8px 0;border-top:1px solid var(--line-soft)"><div style="font-weight:700">' + when + esc(lab) + "</div>" +
+      '<div class="sub" style="margin:2px 0 0' + (p.blank ? ';color:var(--warn)' : "") + '">' + esc(p.blank ? "数はまだ決まっていません（momoの酒井さんが入れます）" : p.text) + "</div></div>";
+  }).join("");
+  return '<section class="card"><div class="row"><h2>momoの引取</h2><span class="pill mute">水・土の朝</span></div>' + rows + "</section>";
+}
 function viewAround(){
   const t = ymdS(jstNow()), wk = addD(t, 7);
   const G = SH.gallery, items = (G && G.items) || [];
@@ -1491,7 +1520,7 @@ function viewHome(){
   const shorts = S.notes.filter(n => n.kind === "short" && !n.resolved_at);
   const lastNote = S.notes.find(n => n.kind === "note");
   const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
-  return '<div class="stack">' + viewPunch() + viewRequests(true) + viewRoutineToday() + viewMyShift() + viewShiftCard() + viewWishCard() + viewAround() +
+  return '<div class="stack">' + viewPunch() + viewRequests(true) + viewRoutineToday() + viewMyShift() + viewShiftCard() + viewPickupCard() + viewWishCard() + viewAround() +
     '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
     '<a class="card" href="#ask" style="display:block;text-decoration:none;color:inherit"><div class="row"><h2>ルボアに聞く</h2><span class="pill mute">どこにある？決まりは？</span></div><p class="sub" style="margin:6px 0 0">置き場・決まりごと・やり方を探す。見つからなければ質問を送る。' + (CAN_EDIT() && K.qs.filter(x => !x.answered_at).length ? ' <b style="color:var(--warn)">答えのない質問 ' + K.qs.filter(x => !x.answered_at).length + "件</b>" : "") + "</p></a>" +
     '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
@@ -1970,6 +1999,8 @@ if(DEMO){
   loadPunch(true).then(render);
 }
 setInterval(() => { if(!document.hidden){ loadShifts().then(render); loadPunch().then(render); } }, 60000);
+loadPickups(true).then(render);
+setInterval(() => { if(!document.hidden) loadPickups().then(render); }, 60000);
 })();
 </script>
 <!--/BODY-->
