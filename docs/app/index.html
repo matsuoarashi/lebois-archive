@@ -8,7 +8,6 @@
 <title>le bois スタッフ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
 <style>
 /* Layout: one phone column; sticky top bar, content, fixed bottom tab bar (4 tabs). Same palette as the le bois 日報 */
 :root{
@@ -190,6 +189,108 @@ textarea[name=a],#rtForm textarea{min-height:96px}
 .chip.on{background:var(--moss);color:#fff;border-color:var(--moss);opacity:.85}
 .card.warn{border-color:var(--warn)}
 .lines li .body{flex:1}.lines li>.btn{flex:none;align-self:center}
+/* ===== 洋食オリオン（ORION STAFF）の作りに合わせる：色は「苔とサンド」 ===== */
+:root{
+  --ground:#F4EFE5; --surface:#FFFFFF; --surface-2:#ECE5D6;
+  --ink:#2B2A24; --muted:#7A7262; --line:#DED6C4; --line-soft:#EAE4D6;
+  --moss:#55663A; --moss-soft:#E7EBDA; --btn-ink:#FFFFFF;
+  --hand:#C27A4A; --hand-soft:#F6E8DC; --warn:#A33C2E; --warn-soft:#F6E3DF;
+  --sq:#3B5A9A; --sq-soft:#E6EBF7; --head:#55663A; --head-ink:#FFFFFF;
+  --font:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+  --r:14px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --ground:#17160F; --surface:#211F17; --surface-2:#2B2920;
+  --ink:#EDE8DC; --muted:#A89F8C; --line:#3B382C; --line-soft:#2F2D23;
+  --moss:#AFC184; --moss-soft:#2C3220; --btn-ink:#17160F;
+  --hand:#E2A27A; --hand-soft:#3A2A1F; --warn:#EC9B88; --warn-soft:#3A221E;
+  --sq:#93B0E6; --sq-soft:#1F2A40; --head:#3A4527; --head-ink:#F1EEE4; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --ground:#17160F; --surface:#211F17; --surface-2:#2B2920;
+  --ink:#EDE8DC; --muted:#A89F8C; --line:#3B382C; --line-soft:#2F2D23;
+  --moss:#AFC184; --moss-soft:#2C3220; --btn-ink:#17160F;
+  --hand:#E2A27A; --hand-soft:#3A2A1F; --warn:#EC9B88; --warn-soft:#3A221E;
+  --sq:#93B0E6; --sq-soft:#1F2A40; --head:#3A4527; --head-ink:#F1EEE4; color-scheme:dark}
+body{font-size:16px;line-height:1.5}
+body::before{background:var(--head)}
+.wrap{padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px))}
+/* ヘッダー：苔色の帯に白いロゴ */
+.top{background:var(--head);color:var(--head-ink);margin:0 calc(-1 * max(14px,env(safe-area-inset-left,0px))) 14px;padding:10px 16px}
+.brand b{font-size:11px;letter-spacing:4px;font-weight:400;opacity:.85}
+.logo{background:var(--head-ink);width:80px;height:18px}
+.brand span{color:var(--head-ink);opacity:.8;font-size:12px}
+.who{background:rgba(255,255,255,.16);border:0;color:var(--head-ink);border-radius:8px;padding:7px 12px;min-height:34px}
+/* カード：白・角14・余白14・小さく字間を空けた見出し */
+.stack{gap:12px}
+.card{border-radius:var(--r);padding:14px;gap:8px}
+.card h2,.card>.row>h2{font-size:12px;letter-spacing:3px;color:var(--moss);font-weight:700}
+h1{font-size:20px;margin:2px 0 2px}
+.sub{font-size:13px}
+/* ボタン：大きく太く。副ボタンは生成り */
+.btn{min-height:56px;padding:0 16px;border-radius:var(--r);font-size:17px;font-weight:700;letter-spacing:1px}
+.btn.full{font-size:20px;letter-spacing:2px;min-height:62px}
+.btn.ghost{background:var(--surface-2);color:var(--ink);border:0;font-weight:700;letter-spacing:0}
+.btn.sm{min-height:40px;padding:0 12px;font-size:14px;border-radius:10px;letter-spacing:0}
+.btn:disabled{opacity:.45}
+/* 切り替え：丸い帯 */
+.seg{display:flex;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0;overflow:hidden}
+.seg button{flex:1;border-radius:0;min-height:38px;font-size:13px;color:var(--muted);font-weight:400;padding:0 4px}
+.seg button[aria-pressed="true"]{background:var(--moss);color:var(--btn-ink);font-weight:700;box-shadow:none}
+/* チップ：2pxの枠・角12・太字。選ぶと苔色の枠＋淡い苔 */
+.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}
+.chips.c3{grid-template-columns:repeat(3,minmax(0,1fr))}.chips.c4{grid-template-columns:repeat(4,minmax(0,1fr))}.chips.c5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.chips.wrap{display:flex;flex-wrap:wrap}
+.chip{border:2px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:8px 6px;font-size:15px;font-weight:700;min-height:52px;line-height:1.3;opacity:1}
+.chip.on{border-color:var(--moss);background:var(--moss-soft);color:var(--moss);opacity:1}
+.chip small{display:block;font-weight:400;font-size:11px;color:var(--muted)}
+.chip:disabled{opacity:.4}
+/* 入力：2pxの枠・高さ50・17px（iPhoneで拡大されない） */
+input[type=text],input[type=number],input[type=date],textarea,select,#askIn,select[name=category],input[name=q],input[name=keywords],textarea[name=a],#rtForm input[name=title],#rtForm textarea,#rtForm select{font-size:17px;border:2px solid var(--line);border-radius:10px;min-height:50px;padding:10px 12px;background:var(--surface);color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--moss)}
+.label{font-size:13px;color:var(--muted);margin:4px 0 2px}
+/* 時刻：大きな表示をタップすると端末のドラムロール */
+.timebox{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.tdisp{position:relative;border:2px solid var(--line);border-radius:12px;background:var(--surface);text-align:center;font-size:32px;font-weight:700;padding:6px 4px 4px;font-variant-numeric:tabular-nums;letter-spacing:1px;line-height:1.1}
+.tdisp small{display:block;font-size:11px;font-weight:400;color:var(--muted);letter-spacing:0;line-height:1.4}
+.tdisp input{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px;min-height:0;border:0;padding:0}
+/* 下から出るシート */
+.sheet .in,.pick .in{background:var(--ground);border-radius:18px 18px 0 0;padding:12px 16px calc(22px + env(safe-area-inset-bottom,0px))}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 4px}
+.pick{background:rgba(0,0,0,.45)}
+/* 希望カレンダー（オリオンと同じ：枠を選んで日をタップ） */
+.modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.modes button{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:6px 2px;font-size:14px;font-weight:700;min-height:54px;line-height:1.25;color:var(--ink)}
+.modes button small{display:block;font-weight:400;font-size:10.5px;color:var(--muted)}
+.modes button.on{border-color:var(--moss);background:var(--moss-soft);color:var(--moss)}
+.modes button.on.t{border-color:var(--hand);background:var(--hand-soft);color:var(--hand)}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal .h{text-align:center;font-size:11px;color:var(--muted);padding:2px 0}
+.cal .d{border:1.5px solid var(--line);border-radius:9px;min-height:58px;padding:3px 2px;font-size:12px;background:var(--surface);display:flex;flex-direction:column;align-items:center;gap:1px;overflow:hidden;cursor:pointer;user-select:none;-webkit-user-select:none;color:var(--ink);font-family:inherit}
+.cal .d.closed{background:var(--surface-2);color:var(--muted);cursor:default;border-style:dashed}
+.cal .d .n{font-weight:700;line-height:1.2}
+.cal .d .k{font-size:10px;line-height:1.2;width:100%;text-align:center;white-space:nowrap;overflow:hidden;color:var(--moss);font-weight:700}
+.cal .d.has{background:var(--moss-soft);border-color:var(--moss)}
+.cal .d.tm{background:var(--hand-soft);border-color:var(--hand)} .cal .d.tm .k{color:var(--hand)}
+.cal .d.w0 .n{color:var(--warn)} .cal .d.w6 .n{color:var(--sq)} .cal .d.hol .n{color:var(--warn)}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.summary div{background:var(--ground);border-radius:10px;padding:8px 4px;text-align:center}
+.summary b{display:block;font-size:20px;line-height:1.2}
+.summary span{font-size:11px;color:var(--muted)}
+.tools{display:flex;gap:8px}.tools button{flex:1;border:1px solid var(--line);background:var(--surface);border-radius:10px;min-height:40px;font-size:13px;color:var(--moss)}
+.foot{padding:4px 0 8px}
+.card h2 .pill{letter-spacing:0}
+/* タブ：白・高さ56・選んだタブは苔色 */
+.tabs a{min-height:56px;padding:9px 0 7px}
+.tabs a[aria-current="page"]{color:var(--moss)}
+.toast{top:calc(64px + env(safe-area-inset-top,0px));bottom:auto;border-radius:999px;padding:10px 18px;font-size:14px}
+.pill{font-size:12px;padding:2px 10px}
+.pill.q{background:var(--hand-soft);color:var(--hand)}
+.names button{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 14px;min-height:48px;font-weight:700}
+.names button.on,.login .names button.on{border-color:var(--moss);background:var(--moss-soft);color:var(--moss)}
+.pad button{border:2px solid var(--line);font-weight:700}
+.dots i{border-color:var(--moss)}.dots i.f{background:var(--moss)}
+.sg .cell b{color:var(--moss)}
 </style>
 <!--/APP-->
 </head>
@@ -332,7 +433,7 @@ const db = LIVE ? remote : local;
 
 /* ---------- 見本データ（?demo=1 で開いたときだけ） ---------- */
 function seedDemo(real){
-  const R = (real || []).filter(Boolean), A = R[0] || "はな", B = R[1] || "けい", Cn = R[2] || "ゆう";
+  const R = (real && real.length ? real : REAL_NAMES).filter(Boolean), A = R[0], B = R[1], Cn = R[2];
   const today = bizDate(), y = bizDate(new Date(jstNow().getTime() - 864e5));
   const at = (date, hm) => new Date(date + "T" + hm + ":00+09:00").toISOString();
   const ids = list => C.checklists[list].sections.flatMap(s => s.items.map(i => i[0]));
@@ -373,6 +474,8 @@ function seedDemo(real){
 }
 /* 見本の記録は、シフト表の実際の名前（下の名前）で作る。シフトを読んでから load 前に入れる */
 let DEMO_NAMES = [];
+/* 接続できないときも、実際のスタッフの表示名で見本を作る（シフト連携の「表示名」と同じ） */
+const REAL_NAMES = ["柚那","愛","由希子","葵","亜妃","琉月","弘樹","菜々","初凪","花連","絵梨","香織","智尋","和実","唯"];
 function staffNames(){ if(DEMO_NAMES.length) return DEMO_NAMES.slice();
   const out = []; SH.days.forEach(d => d.items.forEach(it => { if(it.name && out.indexOf(it.name) < 0) out.push(it.name); })); return out; }
 
@@ -380,7 +483,7 @@ function staffNames(){ if(DEMO_NAMES.length) return DEMO_NAMES.slice();
 const SH0 = mem.get("shifts", { days: [] });
 const SH = { days: SH0.days || [], gallery: SH0.gallery || null, mot: SH0.mot || [], updated: "", error: "", at: 0 };
 function demoShifts(real){
-  const names = real && real.length >= 5 ? real.slice(0, 5) : ["はな", "けい", "ゆう", "そら", "りん"], plan = [
+  const names = (real && real.length >= 5 ? real : REAL_NAMES).slice(0, 5), plan = [
     [["早番","10:30","14:30",0],["終日","10:30","18:30",1]], [["終日","10:30","18:30",2],["遅番","14:30","18:30",-1]],
     [["早番","10:30","14:30",3],["遅番","14:30","18:30",0]], [["終日","10:30","18:30",4],["終日","10:30","18:30",1]]];
   const days = [];
@@ -460,9 +563,9 @@ Object.assign(local, {
     return out; }
 });
 function seedWishDemo(names){
-  const m = addMonth(monthKey(), 1); if(mem.get("wishSeed", "") === m) return;
+  const m = addMonth(monthKey(), 1); if(mem.get("wishSeed2", "") === m) return;
   const all = [], notes = [];
-  (names || []).slice(0, 8).forEach((nm, i) => {
+  (names || []).filter(n => ["新史","佳奈","岩崎"].indexOf(n) < 0).slice(0, 12).forEach((nm, i) => {
     monthDays(m).filter(openDay).forEach((d, j) => {
       const r = (i * 7 + j * 3) % 10; if(r > 5) return;
       const kinds = r === 0 ? ["時間"] : r < 3 ? ["終日"] : r === 3 ? ["早番"] : r === 4 ? ["遅番"] : ["早番","遅番"];
@@ -470,7 +573,7 @@ function seedWishDemo(names){
     });
     notes.push({ month: m, staff: nm, want_days: 8 + (i % 5), note: i % 3 === 0 ? "見本：月末は少なめだと助かります" : "", updated_at: new Date().toISOString() });
   });
-  mem.set("wish", all); mem.set("wishNote", notes); mem.set("plan", []); mem.set("smonth", {}); mem.set("wishSeed", m);
+  mem.set("wish", all); mem.set("wishNote", notes); mem.set("plan", []); mem.set("smonth", {}); mem.set("wishSeed2", m);
 }
 
 /* 公開されたシフトを、シフト表の分より優先して出す */
@@ -489,7 +592,7 @@ async function mergePlan(){
 }
 
 /* ---- スタッフ：希望を出す ---- */
-const W = { month: addMonth(monthKey(), 1), days: {}, want: "", note: "", info: null, loaded: "", busy: false, dirty: false, msg: "" };
+const W = { month: addMonth(monthKey(), 1), days: {}, want: "", note: "", info: null, loaded: "", busy: false, dirty: false, msg: "", mode: "終日", ts: "11:00", te: "15:00" };
 async function loadWish(m){
   W.month = m || W.month;
   try{
@@ -501,38 +604,58 @@ async function loadWish(m){
   }catch(e){ W.msg = e.message; W.loaded = W.month; }
   render();
 }
+function tbox(id, val, label){
+  return '<div class="tdisp"><span>' + esc(val) + "</span><small>" + esc(label) + '</small><input type="time" id="' + id + '" value="' + esc(val) + '" step="1800" aria-label="' + esc(label) + '"></div>';
+}
+const WMODES = [["早番","◯早番"],["中番","△中番"],["遅番","●遅番"],["終日","◎終日"],["時間","※時間"],["消す","消す"]];
+function wishMark(v){ return v.kinds.map(k => k === "時間" ? v.t_start.replace(":00","").replace(":30",".5") + "-" + v.t_end.replace(":00","").replace(":30",".5") : SLOT_MARK[k]).join(""); }
 function viewWish(){
   if(W.loaded !== W.month){ loadWish(); return '<div class="stack"><p class="sub">読み込み中…</p></div>'; }
   const m0 = monthKey(), ms = [m0, addMonth(m0, 1), addMonth(m0, 2)];
-  const info = W.info || {}, locked = !!info.published;
-  const days = monthDays(W.month).filter(openDay);
-  const n = Object.keys(W.days).filter(k => W.days[k].kinds.length).length;
-  let h = '<div class="stack"><a class="back" href="#home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>ホーム</a><h1>シフトの希望</h1>' +
-    '<div class="seg" role="group" aria-label="月">' + ms.map(m => '<button type="button" data-wm="' + m + '" aria-pressed="' + (m === W.month) + '">' + esc(monthLabel(m)) + "</button>").join("") + "</div>" +
-    '<section class="card"><p class="sub" style="margin:0">出られる日に、入れる枠を押してください（いくつ選んでも大丈夫です）。押していない日は「入れない」になります。' +
-    (info.deadline ? ' <b>締切 ' + esc(dayLab(info.deadline)) + "</b>" : "") + "</p>" +
-    '<p class="sub" style="margin:6px 0 0">早番 10:30–14:30／中番 13:30–16:30／遅番 14:30–18:30／終日 10:30–18:30。決まった枠に合わないときは「時間」で開始と終了を選べます。</p>' +
-    (W.sent ? '<p class="sub" style="margin:6px 0 0">提出済み（' + esc(fmtTime(W.sent)) + "）。直して出し直せます。</p>" : "") + "</section>";
-  if(locked) h += '<section class="card"><p style="margin:0">' + esc(monthLabel(W.month)) + 'のシフトは公開されました。変えたいときは店長に伝えてください。</p><p style="margin:8px 0 0"><a class="btn sm ghost" href="#shift">シフトを見る</a></p></section>';
-  h += '<section class="card"><div class="row" style="gap:8px;flex-wrap:wrap"><label class="label" for="wWant" style="margin:0">この月に入りたい日数（目安）</label><input type="number" id="wWant" min="0" max="31" inputmode="numeric" value="' + esc(W.want) + '" style="width:80px"' + (locked ? " disabled" : "") + "></div>" +
-    '<label class="label" for="wNote">ひとこと（任意）</label><textarea id="wNote" maxlength="500" placeholder="例：テスト期間の17日〜21日は少なめだと助かります"' + (locked ? " disabled" : "") + ">" + esc(W.note) + "</textarea></section>";
-  h += '<div class="list">' + days.map(d => {
-    const v = W.days[d.ds] || { kinds: [], t_start: "", t_end: "", comment: "" }, on = k => v.kinds.indexOf(k) >= 0;
-    return '<div class="note"><div class="row"><b>' + esc(dayLab(d.ds)) + "</b>" + (d.hol ? '<span class="pill q">' + esc(d.hol) + "</span>" : "") + (v.kinds.length ? '<span class="pill">' + esc(wishText(v)) + "</span>" : '<span class="sub">入れない</span>') + "</div>" +
-      '<div class="chips" style="margin-top:6px">' + SLOTS.map(s => '<button type="button" class="chip' + (on(s[0]) ? " on" : "") + '" data-wd="' + d.ds + '" data-wk="' + s[0] + '"' + (locked ? " disabled" : "") + ">" + SLOT_MARK[s[0]] + s[0] + "</button>").join("") +
-      '<button type="button" class="chip' + (on("時間") ? " on" : "") + '" data-wd="' + d.ds + '" data-wk="時間"' + (locked ? " disabled" : "") + ">※時間</button></div>" +
-      (on("時間") ? '<div class="row" style="gap:6px;margin-top:6px;justify-content:flex-start"><select data-wt="' + d.ds + '" data-f="t_start" aria-label="開始"' + (locked ? " disabled" : "") + ">" + TIMES.map(t => "<option" + (t === (v.t_start || "11:00") ? " selected" : "") + ">" + t + "</option>").join("") + '</select><span>〜</span><select data-wt="' + d.ds + '" data-f="t_end" aria-label="終了"' + (locked ? " disabled" : "") + ">" + TIMES.map(t => "<option" + (t === (v.t_end || "15:00") ? " selected" : "") + ">" + t + "</option>").join("") + "</select></div>" : "") +
-      (v.kinds.length ? '<input type="text" data-wc="' + d.ds + '" maxlength="200" placeholder="この日のメモ（任意）" value="' + esc(v.comment) + '" style="margin-top:6px"' + (locked ? " disabled" : "") + ">" : "") + "</div>";
-  }).join("") + "</div>";
-  if(!locked) h += '<div class="sticky-meter" style="bottom:calc(64px + env(safe-area-inset-bottom));top:auto"><div class="row"><span>' + n + "日 出られる" + (W.dirty ? '・<b style="color:var(--warn)">まだ送っていません</b>' : "") + '</span><button type="button" class="btn" id="wSend"' + (W.busy ? " disabled" : "") + ">" + (W.sent ? "出し直す" : "提出する") + "</button></div></div>";
+  const info = W.info || {}, locked = !!info.published, mode = W.mode || "終日";
+  const all = monthDays(W.month);
+  const nDay = Object.keys(W.days).filter(k => W.days[k].kinds.length).length;
+  const nTime = Object.keys(W.days).filter(k => W.days[k].kinds.indexOf("時間") >= 0).length;
+  const sl = SLOTS.find(x => x[0] === mode);
+  let h = '<div class="stack"><div class="seg" role="group" aria-label="月">' + ms.map(m => '<button type="button" data-wm="' + m + '" aria-pressed="' + (m === W.month) + '">' + esc(monthLabel(m)) + "</button>").join("") + "</div>";
+  h += '<section class="card"><h2>' + esc(monthLabel(W.month)) + "の希望" + (W.sent ? ' <span class="pill">提出済み</span>' : "") + "</h2>" +
+    (locked ? '<p class="sub" style="margin:0"><span class="pill warn">公開済み</span> この月のシフトは決まりました。変えたいときは店長に伝えてください。</p><a class="btn ghost" href="#shift">シフトを見る</a>'
+      : '<p class="sub" style="margin:0">' + (info.deadline ? "締切 <b>" + esc(dayLab(info.deadline)) + "</b>。" : "") + "入れる枠を選んでから、日をタップしてください。もう一度タップで外せます（1日に2つ付けてもOK）。締切までは何度でも直せます。</p>");
+  if(!locked){
+    h += '<div class="modes">' + WMODES.map(x => { const s2 = SLOTS.find(y => y[0] === x[0]);
+      return '<button type="button" class="' + (x[0] === mode ? "on" + (x[0] === "時間" ? " t" : "") : "") + '" data-wmode="' + x[0] + '">' + esc(x[1]) + "<small>" + (s2 ? s2[1] + "–" + s2[2] : x[0] === "時間" ? esc((W.ts || "11:00") + "–" + (W.te || "15:00")) : "タップで外す") + "</small></button>"; }).join("") + "</div>";
+    if(mode === "時間") h += '<div class="timebox">' + tbox("wTs", W.ts || "11:00", "はじめ") + "<span>〜</span>" + tbox("wTe", W.te || "15:00", "おわり") + '</div><p class="sub" style="margin:0">時刻をタップすると選べます。この時間で日をタップしてください。</p>';
+  }
+  const first = new Date(W.month + "-01T00:00:00Z").getUTCDay();
+  h += '<div class="cal">' + WD.map(x => '<div class="h">' + x + "</div>").join("") + "<div></div>".repeat(first) +
+    all.map(d => { const v = W.days[d.ds]; const open = openDay(d); const on = v && v.kinds.length;
+      const cls = "d w" + d.w + (open ? "" : " closed") + (d.hol ? " hol" : "") + (on ? (v.kinds.length === 1 && v.kinds[0] === "時間" ? " tm" : " has") : "");
+      return '<button type="button" class="' + cls + '"' + (open && !locked ? ' data-wday="' + d.ds + '"' : " disabled") + '><span class="n">' + (+d.ds.slice(8)) + "</span>" +
+        (on ? '<span class="k">' + esc(wishMark(v)) + "</span>" : open ? "" : '<span class="k" style="color:var(--muted);font-weight:400">休</span>') + (d.hol && open ? '<span class="k" style="color:var(--warn);font-weight:400">祝</span>' : "") + "</button>"; }).join("") + "</div>" +
+    '<div class="legend"><span>◯早番 △中番 ●遅番 ◎終日・数字は時間指定</span><span>点線＝定休日</span></div>';
+  if(!locked) h += '<div class="tools"><button type="button" data-wall="1">営業日を全部「' + esc(mode === "消す" ? "終日" : mode) + '」に</button><button type="button" data-wclear="1">すべて消す</button></div>';
+  h += "</section>";
+  h += '<section class="card"><div class="summary"><div><b>' + nDay + '</b><span>出られる日</span></div><div><b>' + nTime + '</b><span>時間指定</span></div><div><b>' + (W.want === "" ? "—" : esc(W.want)) + '</b><span>入りたい日数</span></div></div>' +
+    '<label class="label" for="wWant">この月に入りたい日数（目安）</label><input type="number" id="wWant" min="0" max="31" inputmode="numeric" value="' + esc(W.want) + '"' + (locked ? " disabled" : "") + ">" +
+    '<label class="label" for="wNote">ひとこと（任意）</label><input type="text" id="wNote" maxlength="200" placeholder="例：第2週はテストなので少なめだと助かります" value="' + esc(W.note) + '"' + (locked ? " disabled" : "") + "></section>";
+  if(!locked) h += '<div class="foot"><button type="button" class="btn full" id="wSend"' + (W.busy ? " disabled" : "") + ">" + (W.sent ? "この内容で出し直す" : "この内容で提出する") + "</button>" + (W.dirty ? '<p class="sub" style="text-align:center;margin:6px 0 0;color:var(--warn)">まだ送っていません</p>' : "") + "</div>";
   if(W.msg) h += '<p class="err">' + esc(W.msg) + "</p>";
   return h + "</div>";
+}
+function wishTap(ds){
+  const mode = W.mode || "終日"; const v = W.days[ds] || { kinds: [], t_start: "", t_end: "", comment: "" };
+  if(mode === "消す"){ delete W.days[ds]; W.dirty = true; render(); return; }
+  if(mode === "時間"){ const a = W.ts || "11:00", z = W.te || "15:00"; if(hm2n(z) <= hm2n(a)) return toast("おわりは、はじめより後にしてください");
+    const i = v.kinds.indexOf("時間"); if(i >= 0 && v.t_start === a && v.t_end === z) v.kinds.splice(i, 1); else { if(i < 0) v.kinds.push("時間"); v.t_start = a; v.t_end = z; } }
+  else { const i = v.kinds.indexOf(mode); if(i >= 0) v.kinds.splice(i, 1); else v.kinds.push(mode); }
+  if(v.kinds.length) W.days[ds] = v; else delete W.days[ds];
+  W.dirty = true; render();
 }
 function wishCapture(t){
   if(t.id === "wWant"){ W.want = t.value; W.dirty = true; return; }
   if(t.id === "wNote"){ W.note = t.value; W.dirty = true; return; }
-  if(t.dataset.wc){ const v = W.days[t.dataset.wc]; if(v){ v.comment = t.value; W.dirty = true; } return; }
-  if(t.dataset.wt){ const v = W.days[t.dataset.wt]; if(v){ v[t.dataset.f] = t.value; W.dirty = true; } }
+  if(t.id === "wTs" || t.id === "wTe"){ if(t.id === "wTs") W.ts = t.value; else W.te = t.value; const sp = t.parentNode.querySelector("span"); if(sp) sp.textContent = t.value; }
+  if(t.id === "pS" || t.id === "pE"){ const sp = t.parentNode.querySelector("span"); if(sp) sp.textContent = t.value; }
 }
 async function sendWish(){
   if(W.busy) return;
@@ -651,10 +774,10 @@ function gridHtml(days, info, names, wishBy){
 function pickHtml(info){
   const ds = B.pick.ds, n = B.pick.n, cur = B.rows.find(r => r.day === ds && r.staff === n), w = B.wishes.find(x => x.day === ds && x.staff === n);
   const ts = (cur && cur.t_start) || (w && w.t_start) || "11:00", te = (cur && cur.t_end) || (w && w.t_end) || "15:00";
-  return '<div class="pick" data-pclose="1"><div class="in"><div class="row"><b>' + esc(dayLab(ds)) + " " + esc(n) + '</b><button type="button" class="btn sm ghost" data-pclose="1">閉じる</button></div>' +
+  return '<div class="pick" data-pclose="1"><div class="in"><div class="grab"></div><div class="row"><b>' + esc(dayLab(ds)) + " " + esc(n) + '</b><button type="button" class="btn sm ghost" data-pclose="1">閉じる</button></div>' +
     '<p class="sub" style="margin:0">希望：' + (w ? esc(wishText(w)) + (w.comment ? "（" + esc(w.comment) + "）" : "") : "なし") + (cur ? "　いま：" + esc(cur.slot) + " " + esc(cur.t_start) + "〜" + esc(cur.t_end) : "") + "</p>" +
-    '<div class="chips">' + SLOTS.map(sl => '<button type="button" class="chip' + (w && w.kinds.indexOf(sl[0]) >= 0 ? " on" : "") + '" data-pset="' + sl[0] + '">' + SLOT_MARK[sl[0]] + sl[0] + " " + sl[1] + "–" + sl[2] + "</button>").join("") + "</div>" +
-    '<div class="row" style="gap:6px;justify-content:flex-start"><select id="pS" aria-label="開始">' + TIMES.map(t => "<option" + (t === ts ? " selected" : "") + ">" + t + "</option>").join("") + '</select><span>〜</span><select id="pE" aria-label="終了">' + TIMES.map(t => "<option" + (t === te ? " selected" : "") + ">" + t + "</option>").join("") + '</select><button type="button" class="btn sm ghost" data-pset="時間">この時間で入れる</button></div>' +
+    '<div class="chips">' + SLOTS.map(sl => '<button type="button" class="chip' + (w && w.kinds.indexOf(sl[0]) >= 0 ? " on" : "") + '" data-pset="' + sl[0] + '">' + SLOT_MARK[sl[0]] + sl[0] + "<small>" + sl[1] + "–" + sl[2] + (w && w.kinds.indexOf(sl[0]) >= 0 ? "・希望" : "") + "</small></button>").join("") + "</div>" +
+    '<div class="timebox">' + tbox("pS", ts, "はじめ") + "<span>〜</span>" + tbox("pE", te, "おわり") + '</div><button type="button" class="btn ghost" data-pset="時間">この時間で入れる</button>' +
     (cur ? '<button type="button" class="btn ghost" data-pdel="1">外す</button>' : "") + "</div></div>";
 }
 function pickSet(slot){
@@ -1374,9 +1497,10 @@ function render(){
 $("#view").addEventListener("click", e => {
   const pb = e.target.closest(".punch"); if(pb){ doPunch(pb.dataset.a); return; }
   const wm = e.target.closest("[data-wm]"); if(wm){ if(W.dirty && !confirm("まだ送っていない変更があります。別の月に移りますか？")) return; W.month = wm.dataset.wm; W.loaded = ""; render(); return; }
-  const wk = e.target.closest("[data-wk]"); if(wk){ const ds = wk.dataset.wd, k = wk.dataset.wk; const v = W.days[ds] || { kinds: [], t_start: "", t_end: "", comment: "" };
-    const i = v.kinds.indexOf(k); if(i >= 0) v.kinds.splice(i, 1); else { v.kinds.push(k); if(k === "時間" && !v.t_start){ v.t_start = "11:00"; v.t_end = "15:00"; } }
-    W.days[ds] = v; W.dirty = true; render(); return; }
+  const wmo = e.target.closest("[data-wmode]"); if(wmo){ W.mode = wmo.dataset.wmode; render(); return; }
+  const wdy = e.target.closest("[data-wday]"); if(wdy){ wishTap(wdy.dataset.wday); return; }
+  if(e.target.closest("[data-wall]")){ const k = W.mode === "消す" ? "終日" : W.mode; monthDays(W.month).filter(openDay).forEach(d => { const v = W.days[d.ds] || { kinds: [], t_start: "", t_end: "", comment: "" }; if(v.kinds.indexOf(k) < 0){ v.kinds.push(k); if(k === "時間"){ v.t_start = W.ts; v.t_end = W.te; } } W.days[d.ds] = v; }); W.dirty = true; render(); toast("全部に付けました。出られない日をタップして外してください"); return; }
+  if(e.target.closest("[data-wclear]")){ if(confirm("この月の入力をすべて消しますか？（提出するまで保存されません）")){ W.days = {}; W.dirty = true; render(); } return; }
   if(e.target.id === "wSend"){ sendWish(); return; }
   const bm = e.target.closest("[data-bm]"); if(bm){ if(B.dirty && !confirm("保存していない変更があります。別の月に移りますか？")) return; B.month = bm.dataset.bm; B.loaded = ""; render(); return; }
   if(e.target.id === "bDeadSave"){ (async () => { const who = await needName(); if(!who) return; const v = (document.getElementById("bDead") || {}).value || null;
@@ -1441,7 +1565,7 @@ updateWho();
 render();
 if(DEMO){
   (CFG.supabaseUrl ? rpc("lb_staff_list", {}).then(l => { DEMO_NAMES = (l || []).map(x => x.name); }).catch(() => {}) : Promise.resolve())
-  .then(() => { seedWishDemo(DEMO_NAMES.length ? DEMO_NAMES : ["はな","けい","ゆう","そら","りん"]); B.loaded = ""; W.loaded = ""; return loadShifts(true); }).then(() => { const n = staffNames(); if(mem.get("seeded", "") !== bizDate() + (n.length ? "|real" : "")) seedDemo(n); return load(); }).then(render);
+  .then(() => { seedWishDemo(DEMO_NAMES.length ? DEMO_NAMES : REAL_NAMES); B.loaded = ""; W.loaded = ""; return loadShifts(true); }).then(() => { const n = staffNames(); if(mem.get("seeded", "") !== bizDate() + (n.length ? "|real" : "")) seedDemo(n); return load(); }).then(render);
   loadPunch(true).then(render);
 }else if(!LIVE || AUTH.token){
   load();
