@@ -217,7 +217,8 @@ body::before{background:var(--head)}
 /* ヘッダー：苔色の帯に白いロゴ */
 .top{background:var(--head);color:var(--head-ink);margin:0 calc(-1 * max(14px,env(safe-area-inset-left,0px))) 14px;padding:10px 16px}
 .brand b{font-size:11px;letter-spacing:4px;font-weight:400;opacity:.85}
-.logo{background:var(--head-ink);width:80px;height:18px}
+.logo{background:var(--head-ink);width:92px;height:21px}
+.top{min-height:54px}
 .brand span{color:var(--head-ink);opacity:.8;font-size:12px}
 .who{background:rgba(255,255,255,.16);border:0;color:var(--head-ink);border-radius:8px;padding:7px 12px;min-height:34px}
 /* カード：白・角14・余白14・小さく字間を空けた見出し */
@@ -298,7 +299,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--moss)}
 <!--BODY-->
 <div class="wrap">
   <header class="top">
-    <div class="brand"><b><span class="logo" role="img" aria-label="le bois"></span>スタッフ</b><span id="today"></span></div>
+    <div class="brand"><span class="logo" role="img" aria-label="le bois"></span></div>
     <button class="who" id="who" type="button">名前を選ぶ</button>
   </header>
   <p class="demo" id="demo" hidden>お試しモードです。記録はこの端末にだけ残ります。</p>
@@ -1460,7 +1461,7 @@ function viewManualItem(id){
 function route(){ return (location.hash || "#home").slice(1); }
 function render(){
   const r = route();
-  $("#today").textContent = (function(){ const d = jstNow(); return (d.getUTCMonth()+1) + "月" + d.getUTCDate() + "日（" + WD[d.getUTCDay()] + "）"; })();
+  if($("#today")) $("#today").textContent = (function(){ const d = jstNow(); return (d.getUTCMonth()+1) + "月" + d.getUTCDate() + "日（" + WD[d.getUTCDay()] + "）"; })();
   let html, tab;
   if(LIVE && !AUTH.token){
     $("#view").innerHTML = viewLogin();
