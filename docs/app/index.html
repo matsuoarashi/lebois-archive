@@ -1327,7 +1327,7 @@ function todayRoutines(){
       for(let k = 1; k <= 6; k++){
         const d = addD(t, -k), dd = new Date(d.replace(/\//g, "-") + "T00:00:00Z").getUTCDay();
         if(wd.indexOf(dd) < 0) continue;
-        if(r.created_at && ymdS(new Date(new Date(r.created_at).getTime() + 9*3600e3)) > d) break;  // 足す前の日の分は出さない
+        if(r.created_at && ymdS(new Date(new Date(r.created_at).getTime() + 9*3600e3)) >= d) break;  // 足した日とそれより前の分は出さない（夜に足した仕事が翌日「残り」にならないように）
         if(!rtDone(r.id, d)) out.push({ r, key: d, note: mdS(d) + "（" + WD[dd] + "）の分が残っています" });
         break;
       }
