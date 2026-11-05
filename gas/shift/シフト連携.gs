@@ -185,6 +185,22 @@ function payload_() {
       if (r[5]) item.memo = String(r[5]);
       (byDay[d] = byDay[d] || []).push(item);
     });
+    // freee の勤務日数（勤怠取込が毎朝書く）のうち、シフト記録より前の月の分を勤務回数に足す（2026-11-06）
+    try {
+      const fw = store.getSheetByName('勤務日数（freee）');
+      if (fw && fw.getLastRow() > 1) {
+        const firstRec = rows.reduce((acc, r) => { const d = ymd_(r[0]); return d && (!acc || d < acc) ? d : acc; }, '');
+        const recMonth = firstRec ? firstRec.slice(0, 7) : '9999/99';
+        const minMonth = from.slice(0, 7);
+        fw.getRange(2, 1, fw.getLastRow() - 1, 3).getDisplayValues().forEach(r => {
+          const mt = String(r[1]).match(/(\d{4})\D+(\d{1,2})/);
+          const ym = mt ? mt[1] + '/' + ('0' + mt[2]).slice(-2) : '';
+          const n = Number(r[2]) || 0;
+          if (!r[0] || !n || !ym || ym >= recMonth || ym < minMonth) return;
+          const nm = dn(r[0]); out.counts[nm] = (out.counts[nm] || 0) + n;
+        });
+      }
+    } catch (e) { out.countsNote = 'freee の勤務日数を読めませんでした'; }
     Object.keys(byDay).sort().forEach(d => {
       byDay[d].sort((a, b) => (a.start + a.slot).localeCompare(b.start + b.slot));
       out.days.push({ date: d, items: byDay[d] });

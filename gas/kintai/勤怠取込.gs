@@ -134,6 +134,7 @@ function daily() {
   const y = new Date(Date.now() - 864e5);
   const from = new Date(y.getTime() - (RECHECK_DAYS - 1) * 864e5);
   importRange(ymd_(from), ymd_(y));
+  try { updateWorkCounts(); } catch (e) { Logger.log('勤務日数 ' + e); }
 }
 
 /* エディタから：先月分を取り込む */
@@ -474,4 +475,38 @@ function checkPunch() {
     const emp = empFor_(n);
     Logger.log(n + ' → ' + (emp ? 'freee ID ' + emp + ' / ' + JSON.stringify(status_(emp, company)) : 'freee に見つからない'));
   });
+}
+
+
+/* ====================== 勤務日数（その日のリーダーの目安・2026-11-06 追加） ======================
+ * freee の月ごとの勤務日数を、直近6か月（今月を含む）について読み、
+ * シフト連携の表に「勤務日数（freee）」として書く。書くのは名前・年月・日数だけ（時給や時間は書かない）。
+ * シフト連携の Apps Script が、これとシフト記録を合わせて「勤務回数」を出す。毎朝の daily() から呼ぶ。 */
+function updateWorkCounts() {
+  const company = P.getProperty('COMPANY_ID');
+  if (!company) throw new Error('COMPANY_ID が未設定です');
+  const ss = SpreadsheetApp.openById(P.getProperty('STORE_ID'));
+  const alias = aliases_(ss);
+  const targets = targets_(alias, {});
+  const now = new Date(), rows = [];
+  for (let k = 5; k >= 0; k--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - k, 1), yy = d.getFullYear(), mm = d.getMonth() + 1;
+    const list = employees_(company, yy, mm).map(e => {
+      const name = String(e.display_name || ((e.last_name || '') + ' ' + (e.first_name || ''))).trim();
+      return { id: e.id, name: name, key: alias[norm_(name)] || norm_(name) };
+    }).filter(x => targets[x.key]);
+    const res = apiAll_(list.map(s => ['/employees/' + s.id + '/work_record_summaries/' + yy + '/' + mm, { company_id: company }]));
+    list.forEach((s, i) => {
+      const r = res[i] || {};
+      const days = Number(r.work_days != null ? r.work_days : (r.work_record_summary || {}).work_days) || 0;
+      if (days > 0) rows.push([s.name, yy + '/' + ('0' + mm).slice(-2), days]);
+    });
+  }
+  const sh = SpreadsheetApp.openById(SHIFT_STORE_ID);
+  const out = sh.getSheetByName('勤務日数（freee）') || sh.insertSheet('勤務日数（freee）');
+  out.clear();
+  out.getRange(1, 1, 1, 4).setValues([['名前（freee）', '年月', '勤務日数', '更新 ' + Utilities.formatDate(now, TZ, 'yyyy/MM/dd HH:mm')]]);
+  if (rows.length) out.getRange(2, 1, rows.length, 3).setValues(rows);
+  Logger.log(JSON.stringify(rows));
+  return rows.length;
 }
