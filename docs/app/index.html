@@ -319,6 +319,8 @@ h1{font-size:18px;font-weight:700;margin:2px 0}
 .nowrow b{font-variant-numeric:tabular-nums;font-size:14px}
 .card.now{border:2px solid var(--moss)}
 .chk[aria-checked="true"] .cd{display:none}
+.bchk{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-top:1px solid var(--line-soft);cursor:pointer;font-size:15px;line-height:1.45}
+.bchk:first-child{border-top:0}
 .chk .cd{display:block;font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:2px;font-weight:400}
 .chk .by{font-size:12px}
 .note p{font-size:14px;line-height:1.6}
@@ -1549,7 +1551,7 @@ function viewHome(){
   const wish = (now.getUTCDate() <= 15 || IS_MGR()) ? viewWishCard() : "";
   const notesCard = (shorts.length || freshNote) ? '<section class="card"><div class="row"><h2>引き継ぎ・足りないもの</h2><a class="btn sm ghost" href="#notes">開く</a></div>' +
       (freshNote ? '<p style="margin:0 0 6px;white-space:pre-wrap;overflow-wrap:anywhere">' + esc(freshNote.body) + '</p><p class="sub" style="margin:0 0 8px">' + esc(freshNote.staff) + "・" + fmtTime(freshNote.created_at) + "</p>" : "") +
-      (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : "") +
+      (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" + '<a class="btn full ghost" href="#notes" data-buy="1" style="margin-top:8px">買い出しに行った</a>' : "") +
     "</section>" : "";
   const tables = '<details class="card"><summary style="cursor:pointer;font-weight:700">表を見る：明日の解凍・提供期限・まわりの予定</summary><div class="stack" style="margin-top:10px">' +
       (phase === "close" ? "" : '<div><h3 class="label" style="margin:0 0 4px">明日の分の解凍</h3>' + thawLine + "</div>") +
@@ -1580,6 +1582,35 @@ function viewCheck(list){
   "</div>";
 }
 
+/* ---- 買い出しに行った（11/6）。何をどこで買ったかを軽く残す。足りないものに印を付けると対応済みになる ---- */
+function viewBuy(open){
+  const buys = S.notes.filter(n => n.kind === "buy");
+  const stores = [...new Set(buys.map(n => (n.body.split("：")[0] || "").trim()).filter(Boolean))].slice(0, 6);
+  return '<section class="card" id="buy"><div class="row"><h2>買い出しに行った</h2></div>' +
+    '<p class="sub">行ったら記録します。足りないものに印を付けると、その分は「補充した」になります。</p>' +
+    '<form id="buyForm" class="stack" style="gap:10px">' +
+      '<label class="label" for="buyStore">お店</label><input type="text" id="buyStore" maxlength="40" placeholder="例：業務スーパー" list="buyStores"><datalist id="buyStores">' + stores.map(x => '<option value="' + esc(x) + '">').join("") + "</datalist>" +
+      (open.length ? '<div><span class="label">買ったもの（足りないものから）</span><div class="list" style="margin-top:6px">' + open.map(n => '<label class="bchk"><input type="checkbox" class="buyPick" value="' + esc(n.id) + '" style="width:20px;height:20px;min-height:0;margin:2px 0 0"><span class="ct"><span>' + esc(n.body) + "</span></span></label>").join("") + "</div></div>" : "") +
+      '<label class="label" for="buyItems">ほかに買ったもの（あれば）</label><input type="text" id="buyItems" maxlength="200" placeholder="例：ホイップ2・クレソン">' +
+      '<label class="label" for="buyYen">金額（わかれば）</label><input type="number" id="buyYen" inputmode="numeric" min="0" max="200000" placeholder="例：1280">' +
+      '<button class="btn" type="submit">買い出しを記録する</button></form>' +
+    (buys.length ? '<details style="margin-top:10px"><summary class="sub" style="cursor:pointer;padding:4px 2px">最近の買い出し（2週間）' + buys.length + "件</summary><ul class=\"lines\">" + buys.map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul></details>" : "") +
+  "</section>";
+}
+async function sendBuy(){
+  const store = $("#buyStore").value.trim(), extra = $("#buyItems").value.trim(), yen = Number($("#buyYen").value) || 0;
+  const picks = [...document.querySelectorAll(".buyPick:checked")].map(x => x.value);
+  const names = picks.map(id => (S.notes.find(n => n.id === id) || {}).body).filter(Boolean);
+  if(!store && !names.length && !extra){ $("#buyStore").focus(); return; }
+  const who = await needName(); if(!who) return;
+  const body = (store || "お店不明") + "：" + (names.concat(extra ? [extra] : []).join("・") || "（品目なし）") + (yen ? "　" + yen.toLocaleString("ja-JP") + "円" : "");
+  try{
+    await db.addNote({ kind: "buy", body: body.slice(0, 1000), staff: who });
+    for(const id of picks) await db.resolve(id, who);
+    await load(); toast("買い出しを記録しました");
+  }catch(e){ toast(e.message); }
+}
+
 function viewNotes(){
   const shorts = S.notes.filter(n => n.kind === "short"), notes = S.notes.filter(n => n.kind === "note");
   const item = n => '<div class="note' + (n.resolved_at ? " res" : "") + '"><p>' + esc(n.body) + '</p><div class="meta"><span>' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span>" +
@@ -1590,6 +1621,7 @@ function viewNotes(){
       '<form id="shortForm" class="stack" style="gap:8px"><label class="label" for="shortIn">足りないもの</label><input type="text" id="shortIn" maxlength="200" placeholder="例：牛乳 残り1本"><button class="btn" type="submit">不足リストに追加</button></form></section>' +
     '<div class="list">' + (open.length ? open.map(item).join("") : '<p class="empty">いま足りないものはありません。</p>') + "</div>" +
     (done.length ? '<details><summary class="sub" style="cursor:pointer;padding:4px 2px">対応済み（最近2週間）' + done.length + '件</summary><div class="list" style="margin-top:8px">' + done.map(item).join("") + "</div></details>" : "") +
+    viewBuy(open) +
     '<section class="card"><h2>引き継ぎ</h2><p class="sub">次に入る人に伝えたいことを書きます。紙の引き継ぎノートの代わりです。</p>' +
       '<form id="noteForm" class="stack" style="gap:8px"><label class="label" for="noteIn">引き継ぎ</label><textarea id="noteIn" maxlength="1000" placeholder="例：ガトーショコラ1本を冷蔵に移しました"></textarea><button class="btn" type="submit">引き継ぎを残す</button></form></section>' +
     '<div class="list">' + (notes.length ? notes.map(item).join("") : '<p class="empty">最近2週間の引き継ぎはありません。</p>') + "</div>" +
@@ -1985,6 +2017,7 @@ $("#view").addEventListener("click", e => {
   const ka = e.target.closest("[data-kbanswer]"); if(ka){ const x = K.qs.find(y => y.id === ka.dataset.kbanswer); if(x){ K.edit = { qid: x.id, body: x.body, q: x.body.replace(/[。！!]+$/, "").slice(0, 200), category: "場所" }; render(); window.scrollTo(0, 0); } return; }
   const kv = e.target.closest("[data-kbrevert]"); if(kv){ if(confirm("前の内容に戻しますか？")) (async () => { const who = await needName(); if(!who) return; try{ await db.kbRevert(kv.dataset.kbrevert, who); await load(); toast("戻しました"); }catch(err){ toast(err.message === "manager_only" ? "管理者だけが戻せます" : err.message); } })(); return; }
   const kx = e.target.closest("[data-kbcancel]"); if(kx){ K.edit = null; render(); return; }
+  if(e.target.closest("[data-buy]")) setTimeout(() => { const b = document.getElementById("buy"); if(b) b.scrollIntoView({ behavior: "smooth", block: "start" }); }, 350);
   const tk = e.target.closest("[data-task]"); if(tk){ addNote("task", tk.dataset.task); return; }
   const ch = e.target.closest("[data-cash]"); if(ch){ addNote("cash", ch.dataset.cash); return; }
   if(e.target.id === "copyHand"){ const t = handoverText(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("コピーしました。LINEに貼ってください")).catch(() => prompt("コピーしてLINEに貼ってください", t)); }
@@ -1995,6 +2028,7 @@ $("#view").addEventListener("submit", async e => {
   if(e.target.id === "kbEditForm" || e.target.id === "kbAddForm"){ kbSubmit(e.target); return; }
   if(e.target.id === "rtForm"){ rtSubmit(e.target); return; }
   if(e.target.id === "taskForm"){ const v = $("#taskIn").value.trim(); if(!v) return $("#taskIn").focus(); if(await addNote("task", v)) $("#taskIn").value = ""; }
+  if(e.target.id === "buyForm"){ await sendBuy(); return; }
   if(e.target.id === "noteForm"){ const v = $("#noteIn").value.trim(); if(!v) return $("#noteIn").focus(); if(await addNote("note", v)) $("#noteIn").value = ""; }
 });
 $("#view").addEventListener("change", e => { if(nippoInput(e.target)) return; wishCapture(e.target); if(e.target.id === "bCap"){ B.cap = Math.max(2, Math.min(15, +e.target.value || 5)); mem.set("cap", B.cap); render(); } if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
