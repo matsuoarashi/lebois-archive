@@ -2061,6 +2061,17 @@ if(DEMO){
 }
 setInterval(() => { if(!document.hidden){ loadShifts().then(render); loadPunch().then(render); } }, 60000);
 loadPickups(true).then(render);
+/* 開くたびに名前と役割を確かめ直す（表示名や役割を変えたとき、入り直さなくても反映されるように） */
+(async () => {
+  if(!LIVE || !AUTH.token) return;
+  try{
+    const row = ((await rpc("lb_whoami", { p_token: AUTH.token })) || [])[0];
+    if(row && (row.name !== AUTH.name || row.role !== AUTH.role)){
+      AUTH.name = row.name; AUTH.role = row.role; mem.set("authName", AUTH.name); mem.set("authRole", AUTH.role);
+      updateWho(); render();
+    }
+  }catch(e){}
+})();
 setInterval(() => { if(!document.hidden) loadPickups().then(render); }, 60000);
 })();
 </script>
