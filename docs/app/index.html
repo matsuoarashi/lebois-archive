@@ -314,6 +314,12 @@ h1{font-size:18px;font-weight:700;margin:2px 0}
 .list a,.list button.li{font-size:15px;min-height:54px}
 .list .t small{font-size:12px}
 .chk{font-size:15px;line-height:1.45;padding:12px 14px}
+.nowrow{display:grid;grid-template-columns:5.5em 1fr auto;gap:10px;align-items:center;padding:8px 0;color:inherit;text-decoration:none;font-size:15px}
+.nowrow .meter{margin:0}
+.nowrow b{font-variant-numeric:tabular-nums;font-size:14px}
+.card.now{border:2px solid var(--moss)}
+.chk[aria-checked="true"] .cd{display:none}
+.chk .cd{display:block;font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:2px;font-weight:400}
 .chk .by{font-size:12px}
 .note p{font-size:14px;line-height:1.6}
 .note .meta{font-size:12px}
@@ -1519,22 +1525,37 @@ function viewHome(){
   const po = progress("open"), pc = progress("close");
   const shorts = S.notes.filter(n => n.kind === "short" && !n.resolved_at);
   const lastNote = S.notes.find(n => n.kind === "note");
-  const tile = (list, p) => '<a class="tile' + (p.n === p.total ? " done" : "") + '" href="#check-' + list + '"><b>' + esc(C.checklists[list].title) + '</b><span class="num">' + p.n + "<small> / " + p.total + '</small></span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span>' + (p.n === p.total ? '<span class="pill">完了</span>' : "") + "</a>";
-  return '<div class="stack">' + viewPunch() + viewRequests(true) + viewRoutineToday() + viewMyShift() + viewShiftCard() + viewPickupCard() + viewWishCard() + viewAround() +
-    '<div class="duo">' + tile("open", po) + tile("close", pc) + "</div>" +
-    '<a class="card" href="#ask" style="display:block;text-decoration:none;color:inherit"><div class="row"><h2>ルボアに聞く</h2><span class="pill mute">どこにある？決まりは？</span></div><p class="sub" style="margin:6px 0 0">置き場・決まりごと・やり方を探す。見つからなければ質問を送る。' + (CAN_EDIT() && K.qs.filter(x => !x.answered_at).length ? ' <b style="color:var(--warn)">答えのない質問 ' + K.qs.filter(x => !x.answered_at).length + "件</b>" : "") + "</p></a>" +
-    '<section class="card"><div class="row"><h2>足りないもの</h2><a class="btn sm ghost" href="#notes">' + (shorts.length ? shorts.length + "件" : "追加する") + "</a></div>" +
-      (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : '<p class="sub">いま足りないものはありません。</p>') +
-    "</section>" +
-    (lastNote ? '<section class="card"><div class="row"><h2>最新の引き継ぎ</h2><span class="sub">' + esc(lastNote.staff) + "・" + fmtTime(lastNote.created_at) + '</span></div><p style="margin:0;white-space:pre-wrap;overflow-wrap:anywhere">' + esc(lastNote.body) + "</p></section>" : "") +
-    '<section class="card"><div class="row"><h2>明日の分の解凍</h2><span class="pill mute">退勤前に冷凍庫→冷蔵庫</span></div>' +
-      (tomKind === "closed" ? '<p class="sub">明日（月曜）は定休日です。</p>' : '<p class="sub">明日は' + WD[tw] + "曜日（" + (tomKind === "weekend" ? "週末" : "平日") + "）</p>") +
-      '<table><thead><tr><th>品目</th><th class="n">平日</th><th class="n">週末</th></tr></thead><tbody>' +
-      C.thaw.map(t => '<tr><td>' + esc(t.item) + '<br><span class="sub">' + esc(t.note) + "</span>" + (t.q ? '<br><span class="qline">要確認：' + esc(t.q) + "</span>" : "") + '</td><td class="n' + (tomKind === "weekday" ? '" style="color:var(--moss);font-weight:700' : "") + '">' + esc(t.weekday) + '</td><td class="n' + (tomKind === "weekend" ? '" style="color:var(--moss);font-weight:700' : "") + '">' + esc(t.weekend) + "</td></tr>").join("") +
-      "</tbody></table></section>" +
-    '<section class="card"><h2>提供期限</h2><table><tbody>' + C.expiry.map(e => '<tr><td>' + esc(e.item) + '</td><td class="n" style="white-space:normal;text-align:right">' + esc(e.rule) + "</td></tr>").join("") + '</tbody></table><p class="sub">' + esc(C.expiryNote) + "</p></section>" +
-    (CFG.nippoUrl ? '<a class="btn full" href="#nippo">日報を送る（閉店後）</a>' : "") +
-  "</div>";
+  const freshNote = lastNote && (Date.now() - new Date(lastNote.created_at).getTime() < 36 * 3600e3) ? lastNote : null;
+  /* いまの時間帯：開店前（11時まで・開店前チェックが残っている）→ 営業中 → 閉店（17:30から） */
+  const hm = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const phase = hm >= 17 * 60 + 30 ? "close" : (hm < 11 * 60 && po.n < po.total) ? "open" : "mid";
+  const meter = (list, p) => '<a class="nowrow" href="#check-' + list + '"><span>' + esc(C.checklists[list].title) + '</span><span class="meter"><i style="width:' + (p.total ? p.n/p.total*100 : 0) + '%"></i></span><b>' + (p.n === p.total ? "完了" : p.n + " / " + p.total) + "</b></a>";
+  const thawCol = tomKind === "closed" ? "" : tomKind;
+  const thawLine = tomKind === "closed" ? '<p class="sub" style="margin:0">明日（月曜）は定休日なので解凍はありません。</p>' :
+    '<p class="sub" style="margin:0 0 4px">明日は' + WD[tw] + "曜日（" + (tomKind === "weekend" ? "週末" : "平日") + "）。退勤前に冷凍庫→冷蔵庫</p>" +
+    '<ul class="lines">' + C.thaw.map(t => "<li><div class=\"body\"><span>" + esc(t.item) + '</span><span class="sub">' + esc(t.note) + '</span></div><b style="white-space:nowrap">' + esc(t[thawCol]) + "</b></li>").join("") + "</ul>";
+  let now1 = "";
+  if(phase === "open") now1 = '<section class="card now"><div class="row"><h2>いまやること：開店前</h2><span class="pill">11時開店</span></div>' + meter("open", po) +
+    '<a class="btn full" href="#check-open" style="margin-top:10px">開店前チェックを開く</a></section>';
+  else if(phase === "mid") now1 = '<section class="card now"><div class="row"><h2>いまやること：営業中</h2></div>' + meter("open", po) + meter("close", pc) +
+    '<p class="sub" style="margin:8px 0 0">お客さまが引いた時間に、下の「今日の定期の仕事」を進めてください。</p></section>' + viewRoutineToday();
+  else now1 = '<section class="card now"><div class="row"><h2>いまやること：閉店</h2><span class="pill">18時閉店</span></div>' + meter("close", pc) +
+    '<div style="margin-top:10px">' + thawLine + "</div>" +
+    '<a class="btn full" href="#check-close" style="margin-top:10px">閉店作業を開く</a>' + (CFG.nippoUrl ? '<a class="btn full ghost" href="#nippo" style="margin-top:8px">日報を送る</a>' : "") + "</section>";
+  /* momo の引取は、今日か明日のときだけ */
+  const t0 = ymdS(now).replace(/\//g, "-"), t1 = ymdS(tom).replace(/\//g, "-");
+  const pickSoon = PK.list && PK.list.some(p => p.date === t0 || p.date === t1);
+  /* シフト希望は1〜15日の提出期間だけ（管理者はいつでも） */
+  const wish = (now.getUTCDate() <= 15 || IS_MGR()) ? viewWishCard() : "";
+  const notesCard = (shorts.length || freshNote) ? '<section class="card"><div class="row"><h2>引き継ぎ・足りないもの</h2><a class="btn sm ghost" href="#notes">開く</a></div>' +
+      (freshNote ? '<p style="margin:0 0 6px;white-space:pre-wrap;overflow-wrap:anywhere">' + esc(freshNote.body) + '</p><p class="sub" style="margin:0 0 8px">' + esc(freshNote.staff) + "・" + fmtTime(freshNote.created_at) + "</p>" : "") +
+      (shorts.length ? '<ul class="lines">' + shorts.slice(0,5).map(n => "<li><div class=\"body\"><span>" + esc(n.body) + '</span><span class="sub">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></div></li>").join("") + "</ul>" : "") +
+    "</section>" : "";
+  const tables = '<details class="card"><summary style="cursor:pointer;font-weight:700">表を見る：明日の解凍・提供期限・まわりの予定</summary><div class="stack" style="margin-top:10px">' +
+      (phase === "close" ? "" : '<div><h3 class="label" style="margin:0 0 4px">明日の分の解凍</h3>' + thawLine + "</div>") +
+      '<div><h3 class="label" style="margin:0 0 4px">提供期限</h3><table><tbody>' + C.expiry.map(e => '<tr><td>' + esc(e.item) + '</td><td class="n" style="white-space:normal;text-align:right">' + esc(e.rule) + "</td></tr>").join("") + '</tbody></table><p class="sub">' + esc(C.expiryNote) + "</p></div>" +
+      viewAround() + "</div></details>";
+  return '<div class="stack">' + viewPunch() + viewRequests(true) + now1 + viewMyShift() + viewShiftCard() + (pickSoon ? viewPickupCard() : "") + notesCard + wish + tables + "</div>";
 }
 
 function viewCheck(list){
@@ -1550,7 +1571,7 @@ function viewCheck(list){
       const k = s.items.filter(i => m[i[0]]).length;
       const left = s.items.filter(i => !m[i[0]]).map(i => i[0]).join(",");
       return '<section><div class="sectionh"><h2>' + esc(s.h) + '</h2><span class="sh-r">' + (left ? '<button type="button" class="btn sm ghost bulk" data-list="' + list + '" data-ids="' + left + '">まとめて済み</button>' : "") + k + "/" + s.items.length + '</span></div><div class="list">' +
-        s.items.map(i => { const d = m[i[0]]; return '<button type="button" class="chk" role="checkbox" aria-checked="' + !!d + '" data-list="' + list + '" data-id="' + i[0] + '"><span class="box" aria-hidden="true">' + (d ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>' : "") + '</span><span class="ct"><span>' + esc(i[1]) + "</span>" + (d ? '<span class="by">' + esc(d.by) + "・" + fmtTime(d.at).split(" ")[1] + (d.bulk ? "・まとめて" : "") + "</span>" : "") + "</span></button>"; }).join("") +
+        s.items.map(i => { const d = m[i[0]]; return '<button type="button" class="chk" role="checkbox" aria-checked="' + !!d + '" data-list="' + list + '" data-id="' + i[0] + '"><span class="box" aria-hidden="true">' + (d ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>' : "") + '</span><span class="ct"><span>' + esc(i[1]) + "</span>" + (i[2] ? '<span class="cd">' + esc(i[2]) + "</span>" : "") + (d ? '<span class="by">' + esc(d.by) + "・" + fmtTime(d.at).split(" ")[1] + (d.bulk ? "・まとめて" : "") + "</span>" : "") + "</span></button>"; }).join("") +
       "</div></section>";
     }).join("") +
     '<p class="sub">チェックは同じ日に出勤している人どうしで共有されます。押し直すと外せます。</p>' +
