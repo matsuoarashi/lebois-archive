@@ -1283,7 +1283,19 @@ function todayRoutines(){
   const out = [];
   RT.list.forEach(r => {
     if(r.active === false || (r.months || []).map(Number).indexOf(mon) < 0) return;
-    if(r.rule === "weekly"){ if((r.weekdays || []).map(Number).indexOf(dow) >= 0) out.push({ r, key: t, note: "" }); return; }
+    if(r.rule === "weekly"){
+      const wd = (r.weekdays || []).map(Number);
+      if(wd.indexOf(dow) >= 0){ out.push({ r, key: t, note: "" }); return; }
+      // 繰り越し：いちばん近い予定日（6日以内）が済んでいなければ、次の営業日以降も出す
+      for(let k = 1; k <= 6; k++){
+        const d = addD(t, -k), dd = new Date(d.replace(/\//g, "-") + "T00:00:00Z").getUTCDay();
+        if(wd.indexOf(dd) < 0) continue;
+        if(r.created_at && ymdS(new Date(new Date(r.created_at).getTime() + 9*3600e3)) > d) break;  // 足す前の日の分は出さない
+        if(!rtDone(r.id, d)) out.push({ r, key: d, note: mdS(d) + "（" + WD[dd] + "）の分が残っています" });
+        break;
+      }
+      return;
+    }
     const items = ((SH.gallery && SH.gallery.items) || []).filter(isShow);
     const ended = items.filter(g => g.end && g.end <= t).sort((a, b) => b.end.localeCompare(a.end))[0];
     if(!ended) return;
@@ -1308,7 +1320,7 @@ function viewRoutineToday(){
         (x.note ? '<span class="by">' + esc(x.note) + "</span>" : "") +
         (x.r.detail ? '<span class="by" style="white-space:pre-wrap">' + esc(x.r.detail) + "</span>" : "") +
         (d ? '<span class="by">' + esc(d.staff) + "・" + fmtTime(d.done_at) + " 済み</span>" : "") + "</span></button>"; }).join("") + "</div>" +
-    '<p class="sub" style="margin:6px 0 0">やったら押してください。できなかったら押さずに残せば、ギャラリー清掃は次の出勤日にも出ます。</p></section>';
+    '<p class="sub" style="margin:6px 0 0">やったら押してください。できなかったら押さずに残せば、次の営業日にも出ます。</p></section>';
 }
 function rtForm(pre){
   pre = pre || { timing: "営業中", rule: "weekly", weekdays: [], months: RT_SEASONS[0][1] };
