@@ -333,6 +333,10 @@ textarea{font-size:16px;line-height:1.6}
 .monthnav button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:0 16px;font-size:16px;min-height:44px;color:var(--moss)}
 .monthnav button:disabled{opacity:.35}
 .monthnav b{font-size:17px}
+/* 日報：ヘッダーとタブの間いっぱいに開く */
+.nippo{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 54px);bottom:calc(57px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;background:var(--ground);z-index:4}
+.nippo .nbar{display:flex;justify-content:space-between;align-items:center;max-width:560px;width:100%;margin:0 auto;padding:0 14px}
+.nippo iframe{flex:1;width:100%;max-width:560px;margin:0 auto;border:0;background:var(--ground)}
 #rtForm .row{flex-wrap:wrap}
 .chips.c6{grid-template-columns:repeat(6,minmax(0,1fr))}
 .chips.sm{gap:6px}.chips.sm .chip{min-height:42px;font-size:14px;padding:6px 2px}
@@ -1430,7 +1434,7 @@ function viewHome(){
       C.thaw.map(t => '<tr><td>' + esc(t.item) + '<br><span class="sub">' + esc(t.note) + "</span>" + (t.q ? '<br><span class="qline">要確認：' + esc(t.q) + "</span>" : "") + '</td><td class="n' + (tomKind === "weekday" ? '" style="color:var(--moss);font-weight:700' : "") + '">' + esc(t.weekday) + '</td><td class="n' + (tomKind === "weekend" ? '" style="color:var(--moss);font-weight:700' : "") + '">' + esc(t.weekend) + "</td></tr>").join("") +
       "</tbody></table></section>" +
     '<section class="card"><h2>提供期限</h2><table><tbody>' + C.expiry.map(e => '<tr><td>' + esc(e.item) + '</td><td class="n" style="white-space:normal;text-align:right">' + esc(e.rule) + "</td></tr>").join("") + '</tbody></table><p class="sub">' + esc(C.expiryNote) + "</p></section>" +
-    (CFG.nippoUrl ? '<a class="btn full" href="' + esc(CFG.nippoUrl) + '" target="_blank" rel="noopener">日報を送る（閉店後）</a>' : "") +
+    (CFG.nippoUrl ? '<a class="btn full" href="#nippo">日報を送る（閉店後）</a>' : "") +
   "</div>";
 }
 
@@ -1451,7 +1455,7 @@ function viewCheck(list){
       "</div></section>";
     }).join("") +
     '<p class="sub">チェックは同じ日に出勤している人どうしで共有されます。押し直すと外せます。</p>' +
-    (list === "close" ? viewHandover() : "") +
+    (list === "close" ? viewHandover() + (CFG.nippoUrl ? '<a class="btn full" href="#nippo">日報を送る</a><p class="sub" style="text-align:center;margin:0">閉店作業が終わったら、そのまま日報へ。</p>' : "") : "") +
     '<details style="margin-top:4px"><summary class="sub" style="cursor:pointer;padding:4px 2px">紙のマニュアルを見る</summary><div style="margin-top:8px">' + photosHtml(list, list === "open" ? "開店前準備マニュアル（紙）" : "閉店作業マニュアル（紙）") + "</div></details>" +
   "</div>";
 }
@@ -1506,6 +1510,12 @@ function viewManualItem(id){
 }
 
 function route(){ return (location.hash || "#home").slice(1); }
+/* ---------- 日報（Apps Script の日報フォームをアプリの中に開く） ---------- */
+function viewNippo(){
+  if(!CFG.nippoUrl) return '<p class="empty">日報の送り先が設定されていません。</p>';
+  return '<div class="nippo"><div class="nbar"><a class="back" href="#check-close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>閉店作業に戻る</a><a class="back" href="' + esc(CFG.nippoUrl) + '" target="_blank" rel="noopener">別の画面で開く</a></div>' +
+    '<iframe id="nippoFrame" src="' + esc(CFG.nippoUrl) + '" title="日報" allow="clipboard-write" referrerpolicy="no-referrer"></iframe></div>';
+}
 function render(){
   const r = route();
   if($("#today")) $("#today").textContent = (function(){ const d = jstNow(); return (d.getUTCMonth()+1) + "月" + d.getUTCDate() + "日（" + WD[d.getUTCDay()] + "）"; })();
@@ -1517,7 +1527,13 @@ function render(){
   }
   document.querySelector(".tabs").hidden = false;
   document.querySelectorAll('.tabs a[data-tab="check"],.tabs a[data-tab="notes"]').forEach(a => { a.hidden = VIEWER(); });
-  if(VIEWER() && (r.startsWith("check-") || r === "notes")){ location.hash = "#home"; return; }
+  if(VIEWER() && (r.startsWith("check-") || r === "notes" || r === "nippo")){ location.hash = "#home"; return; }
+  /* 日報は入力中に描き直すと消えるので、開いている間は中を触らない */
+  if(r === "nippo"){
+    if(!document.getElementById("nippoFrame")) $("#view").innerHTML = viewNippo();
+    document.querySelectorAll(".tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.tab === "check" ? "page" : "false"));
+    return;
+  }
   if(r.startsWith("check-")){ const l = r.slice(6) === "close" ? "close" : "open"; mem.set("lastList", l); html = viewCheck(l); tab = "check"; }
   else if(r === "notes"){ html = viewNotes(); tab = "notes"; }
   else if(r === "ask"){ html = viewAsk(); tab = "ask"; }
