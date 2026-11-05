@@ -562,7 +562,7 @@ function seedDemo(real){
   mem.set("kb", [
     { id: "k1", category: "場所", q: "レシートロール（レジの紙）はどこ？", a: "パントリーの電気のスイッチのところに箱で置いてあります。上から2段目の右端。", keywords: "レシート ロール紙 レジ 紙", status: "approved", updated_by: "LINE履歴", updated_at: at(y, "12:00") },
     { id: "k2", category: "決まり", q: "ホットコーヒーの作り置きはいつまで？", a: "作ってから1時間半で廃棄（2026/9/20に2時間→1時間半に変更）。", keywords: "ホットコーヒー 廃棄 時間", status: "approved", updated_by: "LINE履歴", updated_at: at(y, "12:00") },
-    { id: "k3", category: "手順", q: "ブレーカーが落ちたら？", a: "分電盤の内扉を開けて「②」のスイッチを上げる。一度右（オフ）に倒してから左に倒すとカチッと入る。内部の銀色の金属部分には触れない（感電）。", keywords: "ブレーカー 停電 分電盤", status: "approved", updated_by: "新史", updated_at: at(y, "15:00") },
+    { id: "k3", category: "手順", q: "ブレーカーが落ちたら？", a: "分電盤の内扉を開けて「②」のスイッチを上げる。一度右（オフ）に倒してから左に倒すとカチッと入る。内部の銀色の金属部分には触れない（感電）。", keywords: "ブレーカー 停電 分電盤", status: "approved", updated_by: "松尾", updated_at: at(y, "15:00") },
     { id: "k4", category: "ギャラリー", q: "ギャラリーの見学の人が来たら？", a: "予約の有無を確認して2階へ案内。作家さん不在なら電気をつけて見てもらう。詳しい質問は「ギャラリーの公式LINEへ」と案内。", keywords: "見学 ギャラリー 案内", status: "approved", updated_by: "LINE履歴", updated_at: at(y, "12:00") }
   ]);
   const AM = [1,2,3,4,5,6,7,8,9,10,11,12];
@@ -582,7 +582,7 @@ function seedDemo(real){
 /* 見本の記録は、シフト表の実際の名前（下の名前）で作る。シフトを読んでから load 前に入れる */
 let DEMO_NAMES = [];
 /* 接続できないときも、実際のスタッフの表示名で見本を作る（シフト連携の「表示名」と同じ） */
-const REAL_NAMES = ["柚那","愛","由希子","葵","亜妃","琉月","弘樹","菜々","初凪","花連","絵梨","香織","智尋","和実","唯"];
+const REAL_NAMES = ["堀江","田中","星野","岡田","藤江","鈴木","菅谷","小棚木","池尾","ブレイケリー","福永","佐野","畑崎","平井","菅原"];
 function staffNames(){ if(DEMO_NAMES.length) return DEMO_NAMES.slice();
   const out = []; SH.days.forEach(d => d.items.forEach(it => { if(it.name && out.indexOf(it.name) < 0) out.push(it.name); })); return out; }
 
@@ -670,9 +670,9 @@ Object.assign(local, {
     return out; }
 });
 function seedWishDemo(names){
-  const m = addMonth(monthKey(), 1); if(mem.get("wishSeed2", "") === m) return;
+  const m = addMonth(monthKey(), 1); if(mem.get("wishSeed3", "") === m) return;
   const all = [], notes = [];
-  (names || []).filter(n => ["新史","佳奈","岩崎"].indexOf(n) < 0).slice(0, 12).forEach((nm, i) => {
+  (names || []).filter(n => ["松尾","古川","岩崎"].indexOf(n) < 0).slice(0, 12).forEach((nm, i) => {
     monthDays(m).filter(openDay).forEach((d, j) => {
       const r = (i * 7 + j * 3) % 10; if(r > 5) return;
       const kinds = r === 0 ? ["時間"] : r < 3 ? ["終日"] : r === 3 ? ["早番"] : r === 4 ? ["遅番"] : ["早番","遅番"];
@@ -680,7 +680,7 @@ function seedWishDemo(names){
     });
     notes.push({ month: m, staff: nm, want_days: 8 + (i % 5), note: i % 3 === 0 ? "見本：月末は少なめだと助かります" : "", updated_at: new Date().toISOString() });
   });
-  mem.set("wish", all); mem.set("wishNote", notes); mem.set("plan", []); mem.set("smonth", {}); mem.set("wishSeed2", m);
+  mem.set("wish", all); mem.set("wishNote", notes); mem.set("plan", []); mem.set("smonth", {}); mem.set("wishSeed3", m);
 }
 
 /* 公開されたシフトを、シフト表の分より優先して出す */
@@ -1292,7 +1292,7 @@ function viewRequests(forHome){
     '<div class="list">' + t.map(n => '<button type="button" class="chk" role="checkbox" aria-checked="false" data-resolve="' + esc(n.id) + '"><span class="box" aria-hidden="true"></span><span class="ct"><span>' + esc(n.body) + '</span><span class="by">' + esc(n.staff) + "・" + fmtTime(n.created_at) + "</span></span></button>").join("") + "</div>" +
     '<p class="sub" style="margin:6px 0 0">やったら押してください。押すと消えます。</p></section>';
   if(c.length) h += '<section class="card warn"><div class="row"><h2>両替が必要</h2><span class="pill warn">' + c.map(n => esc(n.body)).join("・") + "</span></div>" +
-    '<p class="sub" style="margin:0 0 8px">岡田さん・佳奈さん・新史さんのどなたかが用意します。</p>' + taskList("cash", "用意した") + "</section>";
+    '<p class="sub" style="margin:0 0 8px">岡田さん・古川さん・松尾さんのどなたかが用意します。</p>' + taskList("cash", "用意した") + "</section>";
   return h;
 }
 
