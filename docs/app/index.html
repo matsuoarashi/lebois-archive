@@ -389,7 +389,12 @@ input[type=number]{-moz-appearance:textfield}
 /* シフトの時間帯（帯で表示） */
 .tl{display:flex;flex-direction:column;gap:6px}
 .trow{display:grid;grid-template-columns:48px 1fr;gap:8px;align-items:center}
-.tname{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tname.gap{color:var(--warn)}
+.tname{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tname.lead{background:var(--moss);color:var(--btn-ink,#fff);border-radius:6px;padding:2px 4px;margin-right:2px;text-align:center}
+.lbadge{display:inline-block;background:var(--moss);color:var(--btn-ink,#fff);font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;letter-spacing:.04em;white-space:nowrap;vertical-align:middle}
+.ldline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:8px;font-size:14px}
+.ldline .sub{margin:0;font-size:12px}
+.ldsel{margin-left:auto;min-height:36px!important;font-size:14px!important;padding:4px 8px;border-radius:8px;max-width:100%}.tname.gap{color:var(--warn)}
 .ttrack{position:relative;height:30px;background:var(--surface-2);border-radius:8px;overflow:hidden}
 .ttrack>i{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
 .tticks{height:16px;background:none;overflow:visible}.tticks span{position:absolute;transform:translateX(-50%);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -588,7 +593,7 @@ function staffNames(){ if(DEMO_NAMES.length) return DEMO_NAMES.slice();
 
 /* ---------- シフト（シフト表から。スタッフアプリは表示だけ） ---------- */
 const SH0 = mem.get("shifts", { days: [] });
-const SH = { days: SH0.days || [], gallery: SH0.gallery || null, mot: SH0.mot || [], updated: "", error: "", at: 0 };
+const SH = { days: SH0.days || [], gallery: SH0.gallery || null, mot: SH0.mot || [], counts: SH0.counts || {}, updated: "", error: "", at: 0 };
 function demoShifts(real){
   const names = (real && real.length >= 5 ? real : REAL_NAMES).slice(0, 5), plan = [
     [["早番","10:30","14:30",0],["終日","10:30","18:30",1]], [["終日","10:30","18:30",2],["遅番","14:30","18:30",-1]],
@@ -613,8 +618,8 @@ async function loadShifts(force){
       : await fetch(CFG.shiftUrl, { cache: "no-store" });
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || "読み込めませんでした");
-    SH.days = j.days || []; SH.gallery = j.gallery || null; SH.mot = j.mot || []; SH.updated = j.updated || ""; SH.error = "";
-    mem.set("shifts", { days: SH.days, gallery: SH.gallery, mot: SH.mot });
+    SH.days = j.days || []; SH.gallery = j.gallery || null; SH.mot = j.mot || []; SH.updated = j.updated || ""; SH.error = ""; SH.counts = j.counts || {};
+    mem.set("shifts", { days: SH.days, gallery: SH.gallery, mot: SH.mot, counts: SH.counts });
   }catch(e){ SH.error = "シフトを読み込めませんでした（前に読んだ分を表示しています）"; }
   await mergePlan();
 }
@@ -1067,20 +1072,65 @@ function viewAround(){
   return h;
 }
 /* シフトを時間の帯で見せる（10時〜19時）。今日は今の時刻に線を引く */
-function shiftBars(items, isToday){
+/* ---- その日のリーダー（11/6）。ふだんは出勤者のうち勤務回数が多い人。管理者が日ごとに切り替えられる ---- */
+const LD = { map: {}, at: 0 };
+async function loadLeaders(force){
+  if(!force && LD.at && Date.now() - LD.at < 5 * 60e3) return;
+  LD.at = Date.now();
+  try{
+    if(DEMO || !LIVE){ LD.map = mem.get("leaders", {}); return; }
+    if(!AUTH.token){ LD.at = 0; return; }
+    const t = jstNow(), from = ymdS(new Date(t.getTime() - 864e5)).replace(/\//g, "-"), to = ymdS(new Date(t.getTime() + 15 * 864e5)).replace(/\//g, "-");
+    const rows = await rpc("lb_leader_list", { p_token: AUTH.token, p_from: from, p_to: to }) || [];
+    const m = {}; rows.forEach(r => { m[String(r.day).replace(/-/g, "/")] = { staff: r.staff, set_by: r.set_by }; }); LD.map = m;
+  }catch(e){ /* 取れなければ自動のまま */ }
+}
+function shiftCounts(){
+  if(SH.counts && Object.keys(SH.counts).length) return SH.counts;
+  const c = {}; SH.days.forEach(d => d.items.forEach(i => { if(i.name && !i.vacant) c[i.name] = (c[i.name] || 0) + 1; })); return c;
+}
+function leaderFor(ds, items){
+  const names = [...new Set(items.filter(i => i.name && !i.vacant).map(i => i.name))];
+  if(!names.length) return null;
+  const set = LD.map[ds];
+  if(set && names.indexOf(set.staff) >= 0) return { name: set.staff, manual: true, by: set.set_by, names };
+  const cnt = shiftCounts();
+  const mine = n => items.filter(i => i.name === n);
+  const dur = n => mine(n).reduce((a, i) => a + hm2n(i.end) - hm2n(i.start), 0);
+  const st = n => Math.min(...mine(n).map(i => hm2n(i.start)));
+  const order = names.slice().sort((a, b) => (cnt[b] || 0) - (cnt[a] || 0) || dur(b) - dur(a) || st(a) - st(b) || a.localeCompare(b, "ja"));
+  return { name: order[0], manual: false, names };
+}
+async function setLeader(ds, name){
+  const day = ds.replace(/\//g, "-");
+  try{
+    if(DEMO || !LIVE){ const m = mem.get("leaders", {}); if(name) m[ds] = { staff: name, set_by: me() }; else delete m[ds]; mem.set("leaders", m); }
+    else await rpc("lb_leader_set", { p_token: AUTH.token, p_day: day, p_staff: name || "" });
+    await loadLeaders(true); render(); toast(name ? name + " さんをリーダーにしました" : "自動（勤務回数が多い人）に戻しました");
+  }catch(e){ toast(/manager_only/.test(e.message) ? "リーダーを変えられるのは管理者だけです" : e.message); }
+}
+function leaderLine(ds, L){
+  if(!L || L.names.length < 2) return "";
+  const pick = IS_MGR() ? '<select class="ldsel" data-ld="' + esc(ds) + '" aria-label="この日のリーダーを変える"><option value="">自動（勤務回数）</option>' +
+    L.names.map(n => '<option value="' + esc(n) + '"' + (L.manual && L.name === n ? " selected" : "") + ">" + esc(n) + "</option>").join("") + "</select>" : "";
+  return '<div class="ldline"><span class="lbadge">リーダー</span><b>' + esc(L.name) + "</b>" +
+    '<span class="sub">' + (L.manual ? (L.by ? esc(L.by) + " さんが指定" : "指定") : "勤務回数が多い人") + "</span>" + pick + "</div>";
+}
+function shiftBars(items, isToday, ds){
   const A = 10, Z = 19, pos = t => Math.max(0, Math.min(100, (hm2n(t) - A) / (Z - A) * 100));
   const ticks = [11, 13, 15, 17].map(h => '<span style="left:' + ((h - A) / (Z - A) * 100) + '%">' + h + "</span>").join("");
   const grid = [11, 12, 13, 14, 15, 16, 17, 18].map(h => '<i style="left:' + ((h - A) / (Z - A) * 100) + '%"></i>').join("");
   const n = jstNow(), now = n.getUTCHours() + n.getUTCMinutes() / 60;
   const nowLine = isToday && now >= A && now <= Z ? '<b class="tnow" style="left:' + ((now - A) / (Z - A) * 100) + '%"></b>' : "";
+  const L = ds ? leaderFor(ds, items) : null;
   const rows = items.slice().sort((a, b) => (a.start + a.end).localeCompare(b.start + b.end)).map(it => {
     const l = pos(it.start), w = Math.max(4, pos(it.end) - l);
     const on = isToday && now >= hm2n(it.start) && now < hm2n(it.end);
     const who = it.vacant ? "空き" : it.note ? it.note : it.name;
-    return '<div class="trow"><span class="tname' + (it.vacant ? " gap" : "") + '">' + esc(who) + '</span><span class="ttrack">' + grid +
+    return '<div class="trow"><span class="tname' + (it.vacant ? " gap" : "") + (L && L.names.length > 1 && it.name === L.name ? " lead" : "") + '">' + esc(who) + '</span><span class="ttrack">' + grid +
       '<span class="tbar' + (it.vacant ? " vac" : "") + (on ? " on" : "") + '" style="left:' + l + "%;width:" + w + '%"><em>' + esc(it.start) + "–" + esc(it.end) + "</em></span>" + nowLine + "</span></div>";
   }).join("");
-  return '<div class="tl"><div class="trow thead"><span class="tname"></span><span class="ttrack tticks">' + ticks + "</span></div>" + rows + "</div>" +
+  return '<div class="tl"><div class="trow thead"><span class="tname"></span><span class="ttrack tticks">' + ticks + "</span></div>" + rows + "</div>" + leaderLine(ds, L) +
     (items.some(i => i.vacant) ? '<p class="sub" style="margin:0;color:var(--warn)">点線は人が足りない枠です。</p>' : "");
 }
 function shiftItems(items){
@@ -1145,7 +1195,7 @@ function viewMyShift(){
   if(!mine.length) return '<section class="card mine"><h2>' + esc(name) + ' さんの出勤</h2><p class="sub" style="margin:0">2週間以内の出勤は入っていません。</p></section>';
   const n = mine[0];
   return '<section class="card mine"><div class="row"><h2>' + esc(name) + ' さんの次の出勤</h2><span class="pill">' + (n.date === today ? "今日" : esc(dayLabel(n.date))) + "</span></div>" +
-    '<p style="margin:0;font-size:18px"><b>' + esc(n.it.start) + "〜" + esc(n.it.end) + '</b> <span class="sub">' + esc(n.it.slot) + "</span></p>" +
+    '<p style="margin:0;font-size:18px"><b>' + esc(n.it.start) + "〜" + esc(n.it.end) + '</b> <span class="sub">' + esc(n.it.slot) + "</span>" + (function(){ const d = SH.days.find(x => x.date === n.date), L = d && leaderFor(d.date, d.items); return L && L.names.length > 1 && L.name === name ? ' <span class="lbadge">この日のリーダー</span>' : ""; })() + "</p>" +
     (mine.length > 1 ? '<p class="sub" style="margin:0">そのあと：' + mine.slice(1, 4).map(m => esc(dayLabel(m.date)) + " " + esc(m.it.start)).join("、") + "</p>" : "") + "</section>";
 }
 
@@ -1155,14 +1205,14 @@ function viewShiftCard(){
   const gaps = SH.days.filter(d => d.items.some(i => i.vacant)).length;
   const isMon = jstNow().getUTCDay() === 1;
   return '<section class="card"><div class="row"><h2>今日のシフト</h2><a class="btn sm ghost" href="#shift">今週を見る</a></div>' +
-    (t ? shiftBars(t.items, true) : '<p class="sub">' + (isMon ? "今日は定休日です。" : "今日のシフトは入っていません。") + "</p>") +
+    (t ? shiftBars(t.items, true, today) : '<p class="sub">' + (isMon ? "今日は定休日です。" : "今日のシフトは入っていません。") + "</p>") +
     (gaps ? '<p style="margin:0"><span class="pill warn">人が足りない日が' + gaps + "日あります</span></p>" : "") +
     (SH.error ? '<p class="sub">' + esc(SH.error) + "</p>" : "") + "</section>";
 }
 function viewShift(){
   const today = bizDate().replace(/-/g, "/");
   return '<div class="stack"><a class="back" href="#home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>ホーム</a><h1>シフト（2週間）</h1>' +
-    (SH.days.length ? SH.days.map(d => '<section class="card sec"><div class="dayh' + (d.date === today ? " today" : "") + '"><b>' + esc(dayLabel(d.date)) + "</b>" + (d.date === today ? '<span class="pill">今日</span>' : "") + (d.items.some(i => i.vacant) ? '<span class="pill warn">人が足りない枠あり</span>' : "") + "</div>" + shiftBars(d.items, d.date === today) + "</section>").join("") : '<p class="empty">表示できるシフトがありません。</p>') +
+    (SH.days.length ? SH.days.map(d => '<section class="card sec"><div class="dayh' + (d.date === today ? " today" : "") + '"><b>' + esc(dayLabel(d.date)) + "</b>" + (d.date === today ? '<span class="pill">今日</span>' : "") + (d.items.some(i => i.vacant) ? '<span class="pill warn">人が足りない枠あり</span>' : "") + "</div>" + shiftBars(d.items, d.date === today, d.date) + "</section>").join("") : '<p class="empty">表示できるシフトがありません。</p>') +
     '<p class="sub">' + ((SH.appMonths || []).length ? (SH.appMonths.map(monthLabel).join("・") + "はアプリで作ったシフトです。それ以外の月は") : "") + 'シフト登録表から読んでいます（変更は15分ほどでここに出ます）。月曜は定休日です。' + (SH.updated && SH.updated !== "見本" ? "（最終取込 " + esc(SH.updated) + "）" : "") + "</p>" +
     (SH.error ? '<p class="sub">' + esc(SH.error) + "</p>" : "") + "</div>";
 }
@@ -2037,7 +2087,7 @@ $("#view").addEventListener("submit", async e => {
   if(e.target.id === "buyForm"){ await sendBuy(); return; }
   if(e.target.id === "noteForm"){ const v = $("#noteIn").value.trim(); if(!v) return $("#noteIn").focus(); if(await addNote("note", v)) $("#noteIn").value = ""; }
 });
-$("#view").addEventListener("change", e => { if(nippoInput(e.target)) return; wishCapture(e.target); if(e.target.id === "bCap"){ B.cap = Math.max(2, Math.min(15, +e.target.value || 5)); mem.set("cap", B.cap); render(); } if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
+$("#view").addEventListener("change", e => { if(nippoInput(e.target)) return; if(e.target.classList && e.target.classList.contains("ldsel")){ setLeader(e.target.dataset.ld, e.target.value); return; } wishCapture(e.target); if(e.target.id === "bCap"){ B.cap = Math.max(2, Math.min(15, +e.target.value || 5)); mem.set("cap", B.cap); render(); } if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
 $("#view").addEventListener("input", e => { if(nippoInput(e.target)) return; wishCapture(e.target); if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0,0); });
 document.addEventListener("visibilitychange", () => { if(!document.hidden) load(); });
@@ -2061,6 +2111,8 @@ if(DEMO){
 }
 setInterval(() => { if(!document.hidden){ loadShifts().then(render); loadPunch().then(render); } }, 60000);
 loadPickups(true).then(render);
+loadLeaders(true).then(render);
+setInterval(() => { if(!document.hidden) loadLeaders().then(render); }, 60000);
 /* 開くたびに名前と役割を確かめ直す（表示名や役割を変えたとき、入り直さなくても反映されるように） */
 (async () => {
   if(!LIVE || !AUTH.token) return;

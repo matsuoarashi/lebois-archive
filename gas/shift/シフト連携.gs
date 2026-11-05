@@ -160,17 +160,21 @@ function doPost(e) {
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
 function payload_() {
-  const out = { ok: true, updated: '', days: [] };
+  const out = { ok: true, updated: '', days: [], counts: {} };
   try {
     const store = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('STORE_ID'));
     const rec = store.getSheetByName('シフト記録');
     const dn = displayNames_(store);
     const today = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd');
     const end = Utilities.formatDate(new Date(Date.now() + (DAYS - 1) * 864e5), TZ, 'yyyy/MM/dd');
+    const from = Utilities.formatDate(new Date(Date.now() - 120 * 864e5), TZ, 'yyyy/MM/dd');
     const byDay = {};
     const rows = rec.getLastRow() > 1 ? rec.getRange(2, 1, rec.getLastRow() - 1, 8).getDisplayValues() : [];
     rows.forEach(r => {
       const d = ymd_(r[0]);
+      // 勤務回数（その日のリーダーの目安。直近120日〜表示の最後の日まで、シフト記録に入っている回数）
+      const raw0 = String(r[4]).trim();
+      if (d && d >= from && d <= end && raw0 && raw0.charAt(0) !== '※') { const nm = dn(raw0); out.counts[nm] = (out.counts[nm] || 0) + 1; }
       if (!d || d < today || d > end) return;
       if (String(r[7]) > out.updated) out.updated = String(r[7]);
       const raw = String(r[4]).trim();
