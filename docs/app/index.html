@@ -1118,7 +1118,7 @@ function leaderLine(ds, L){
   const pick = IS_MGR() ? '<select class="ldsel" data-ld="' + esc(ds) + '" aria-label="この日のリーダーを変える"><option value="">自動（勤務回数）</option>' +
     L.names.map(n => '<option value="' + esc(n) + '"' + (L.manual && L.name === n ? " selected" : "") + ">" + esc(n) + "</option>").join("") + "</select>" : "";
   return '<div class="ldline"><span class="lbadge">リーダー</span><b>' + esc(L.name) + "</b>" +
-    '<span class="sub">' + (L.manual ? (L.by ? esc(L.by) + " さんが指定" : "指定") : L.fixed ? "いつものリーダー" : "勤務回数が多い人") + "</span>" + pick + "</div>";
+    (L.fixed ? "" : '<span class="sub">' + (L.manual ? (L.by ? esc(L.by) + " さんが指定" : "指定") : "勤務回数が多い人") + "</span>") + pick + "</div>";
 }
 function shiftBars(items, isToday, ds){
   const A = 10, Z = 19, pos = t => Math.max(0, Math.min(100, (hm2n(t) - A) / (Z - A) * 100));
