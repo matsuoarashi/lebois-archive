@@ -1074,6 +1074,8 @@ function viewAround(){
 /* シフトを時間の帯で見せる（10時〜19時）。今日は今の時刻に線を引く */
 /* ---- その日のリーダー（11/6）。ふだんは出勤者のうち勤務回数が多い人。管理者が日ごとに切り替えられる ---- */
 const LD = { map: {}, at: 0 };
+/* 出勤していれば必ずリーダーにする人（松尾さん 11/6：岡田さんは freee に打刻がないので回数が少なく出る）。管理者が日ごとに指定すればそちらが優先 */
+const ALWAYS_LEADER = ["岡田"];
 async function loadLeaders(force){
   if(!force && LD.at && Date.now() - LD.at < 5 * 60e3) return;
   LD.at = Date.now();
@@ -1094,6 +1096,8 @@ function leaderFor(ds, items){
   if(!names.length) return null;
   const set = LD.map[ds];
   if(set && names.indexOf(set.staff) >= 0) return { name: set.staff, manual: true, by: set.set_by, names };
+  const fixed = ALWAYS_LEADER.find(n => names.indexOf(n) >= 0);
+  if(fixed) return { name: fixed, manual: false, fixed: true, names };
   const cnt = shiftCounts();
   const mine = n => items.filter(i => i.name === n);
   const dur = n => mine(n).reduce((a, i) => a + hm2n(i.end) - hm2n(i.start), 0);
@@ -1114,7 +1118,7 @@ function leaderLine(ds, L){
   const pick = IS_MGR() ? '<select class="ldsel" data-ld="' + esc(ds) + '" aria-label="この日のリーダーを変える"><option value="">自動（勤務回数）</option>' +
     L.names.map(n => '<option value="' + esc(n) + '"' + (L.manual && L.name === n ? " selected" : "") + ">" + esc(n) + "</option>").join("") + "</select>" : "";
   return '<div class="ldline"><span class="lbadge">リーダー</span><b>' + esc(L.name) + "</b>" +
-    '<span class="sub">' + (L.manual ? (L.by ? esc(L.by) + " さんが指定" : "指定") : "勤務回数が多い人") + "</span>" + pick + "</div>";
+    '<span class="sub">' + (L.manual ? (L.by ? esc(L.by) + " さんが指定" : "指定") : L.fixed ? "いつものリーダー" : "勤務回数が多い人") + "</span>" + pick + "</div>";
 }
 function shiftBars(items, isToday, ds){
   const A = 10, Z = 19, pos = t => Math.max(0, Math.min(100, (hm2n(t) - A) / (Z - A) * 100));
