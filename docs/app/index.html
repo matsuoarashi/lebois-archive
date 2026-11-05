@@ -343,6 +343,27 @@ textarea{font-size:16px;line-height:1.6}
 .chips.flow .chip{padding:6px 14px;flex:0 0 auto}
 label.chip{display:flex;align-items:center;justify-content:center;cursor:pointer;margin:0}#rtForm select{flex:1 1 100%;width:100%;min-width:0}
 select{max-width:100%}
+
+/* 日報 */
+.nbar2{display:flex;justify-content:space-between;align-items:baseline}.nbar2 b{font-size:18px}
+.nprog{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}.nprog i{height:5px;border-radius:3px;background:var(--line)}.nprog i.on{background:var(--moss)}.nprog i.skip{opacity:.35}
+.nrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:15px}.nrow:last-child{border-bottom:0}
+.nrow>span:first-child{min-width:0}.nrow input[type=text]{flex:1;min-width:0}
+.stp{display:inline-flex;align-items:center;gap:6px;flex:none}
+.stp button{width:44px;height:44px;border:2px solid var(--line);border-radius:12px;background:var(--surface);font-size:22px;font-weight:700;color:var(--moss);line-height:1;padding:0}
+.stp input{width:64px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;padding:6px 4px;min-height:44px}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
+.nmoney{width:150px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}.nmoney.big{width:100%;font-size:26px!important;min-height:60px}
+.nbig{font-size:22px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ncells{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ncells>div{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.ncnt.ok{border-color:var(--moss)}.ncnt.bad{border-color:var(--warn)}
+.nres{margin:0;font-size:14px}
+.seg.sm{display:inline-flex;width:auto;vertical-align:middle;margin-left:4px}.seg.sm button{flex:none;min-height:30px;font-size:12px;padding:0 10px;white-space:nowrap}
+.nlab{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.pill.sqp{background:var(--sq-soft);color:var(--sq)}
+.nnav{display:grid;grid-template-columns:auto 1fr;gap:8px}.nnav .btn:only-child{grid-column:1/-1}
+.nrep{white-space:pre-wrap;background:var(--ground);border-radius:10px;padding:12px;font-size:14px;line-height:1.6;margin:0;font-family:inherit;max-height:46vh;overflow:auto}
 </style>
 <!--/APP-->
 </head>
@@ -1510,12 +1531,274 @@ function viewManualItem(id){
 }
 
 function route(){ return (location.hash || "#home").slice(1); }
-/* ---------- 日報（Apps Script の日報フォームをアプリの中に開く） ---------- */
-function viewNippo(){
-  if(!CFG.nippoUrl) return '<p class="empty">日報の送り先が設定されていません。</p>';
-  return '<div class="nippo"><div class="nbar"><a class="back" href="#check-close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>閉店作業に戻る</a><a class="back" href="' + esc(CFG.nippoUrl) + '" target="_blank" rel="noopener">別の画面で開く</a></div>' +
-    '<iframe id="nippoFrame" src="' + esc(CFG.nippoUrl) + '" title="日報" allow="clipboard-write" referrerpolicy="no-referrer"></iframe></div>';
+/* ---------- 日報（アプリの画面。計算と保存先は今までの日報フォームと同じ） ----------
+ * 読み込み：日報の Apps Script に POST {token, action:"state"} → 在庫の出発点・レジの起点（getState）と Square の今日の数字（getToday）
+ * 送信：POST {token, action:"submit", entry} → submitDay（製造予定表の「日次ログ」「在庫台帳」に書く）
+ * 現金：あるはず ＝ 前日の実査（起点）＋ 現金売上 − 回収 − 出金。1万円を超えて足りない日は運営の回収とみなす */
+const NP = [
+  { k: "cheese",  n: "チーズケーキ",     u: "切れ", b: "本",    per: 7, fu: "b" },
+  { k: "gateau",  n: "ガトーショコラ",   u: "切れ", b: "本",    per: 9, fu: "b" },
+  { k: "chiffon", n: "シフォンケーキ",   u: "個",   b: "ロール", per: 8, fu: "u" },
+  { k: "croque",  n: "クロックムッシュ", u: "食",   b: null,    per: 1, fu: "u" }
+];
+const NMAP = [
+  { sq: "チーズケーキ", k: "cheese", mul: 1 }, { sq: "チーズケーキ（1本）", k: "cheese", mul: 7 },
+  { sq: "ガトーショコラ", k: "gateau", mul: 1 },
+  { sq: "シフォンケーキ（チョコ）", k: "chiffon", mul: 1 }, { sq: "シフォンケーキ（オレンジ）", k: "chiffon", mul: 1 },
+  { sq: "クロックムッシュ", k: "croque", mul: 1 }
+];
+const NSTEPS = ["今日のデータ", "在庫を数える", "差の確認", "レジのお金", "確認して送る"];
+const N = { loaded: false, loading: false, err: "", st: null, today: null, step: 1, done: false, busy: false, msg: "", ok: true, fmt: "std", final: null, f: null };
+function yenN(v){ return "¥" + Math.round(v || 0).toLocaleString("ja-JP"); }
+function nToday(){ const d = jstNow(); return { iso: bizDate(d), label: (d.getUTCMonth()+1) + "/" + d.getUTCDate() + "(" + WD[d.getUTCDay()] + ")" }; }
+function nNorm(st){
+  st = st || {}; if(!st.stock) st.stock = {};
+  NP.forEach(p => { if(!st.stock[p.k]) st.stock[p.k] = { fz: 0, ch: 0 }; });
+  if(!st.log) st.log = []; if(!st.items) st.items = [];
+  if(typeof st.float !== "number") st.float = 0;
+  if(typeof st.base !== "number") st.base = st.float;
+  if(typeof st.baseLabel !== "string") st.baseLabel = "";
+  if(typeof st.pickup !== "number") st.pickup = 0;
+  if(typeof st.pickupMin !== "number") st.pickupMin = 10000;
+  return st;
 }
+function nDemo(){
+  return { state: { stock: { cheese: { fz: 21, ch: 6 }, gateau: { fz: 18, ch: 5 }, chiffon: { fz: 6, ch: 2 }, croque: { fz: 10, ch: 2 } }, float: 30000, base: 41200, baseLabel: "前日", pickup: 0, pickupMin: 10000,
+      items: ["コーヒー HOT","コーヒーラテ ICE","プリン","クロッシュ（オリジナル）"], log: [] },
+    today: { sales: 18400, cash: 3200, items: { "チーズケーキ": 3, "ガトーショコラ": 1, "クロックムッシュ": 2, "コーヒー HOT": 4, "コーヒーラテ ICE": 3, "プリン": 2 }, arrivals: {}, note: "見本の数字です（Square にはつないでいません）。" } };
+}
+async function nippoLoad(){
+  if(N.loading) return; N.loading = true; N.err = ""; nippoRender();
+  try{
+    let j;
+    if(DEMO || !LIVE){ j = Object.assign({ ok: true }, nDemo()); }
+    else {
+      const r = await fetch(CFG.nippoUrl, { method: "POST", body: JSON.stringify({ token: AUTH.token, action: "state" }) });
+      j = await r.json();
+      if(j.error === "login_required"){ logout(true); return; }
+    }
+    if(!j.ok) throw new Error(j.message || j.error || "読み込めませんでした");
+    N.st = nNorm(j.state); N.today = j.today || { sales: 0, cash: 0, items: {}, arrivals: {}, note: "" };
+    const f = { sales: N.today.sales || 0, cash: N.today.cash || 0, payout: 0, counted: 0, q: {}, arr: {}, fz: {}, fzu: {}, ch: {}, reason: {}, newNames: ["", ""], newQty: [0, 0] };
+    Object.keys(N.today.items || {}).forEach(nm => { f.q[nm] = Number(N.today.items[nm]) || 0; });
+    NP.forEach(p => {
+      f.arr[p.k] = Number((N.today.arrivals || {})[p.k]) || 0; f.fzu[p.k] = p.fu; f.reason[p.k] = null;
+      f.fz[p.k] = p.fu === "b" ? Math.round(N.st.stock[p.k].fz / p.per) : N.st.stock[p.k].fz;
+      f.ch[p.k] = N.st.stock[p.k].ch;
+    });
+    N.f = f; N.day = bizDate(); N.loaded = true; N.step = 1; N.done = false; N.final = null; N.msg = "";
+  }catch(e){ N.err = "日報のデータを読み込めませんでした（" + e.message + "）。電波を確かめて、もう一度開いてください。"; }
+  N.loading = false; nippoRender();
+}
+function nNames(){ const out = NMAP.map(m => m.sq); (N.st.items || []).concat(Object.keys(N.f.q)).forEach(nm => { if(out.indexOf(nm) < 0) out.push(nm); }); return out; }
+function nSold(){
+  const out = [];
+  nNames().forEach(nm => { if((N.f.q[nm] || 0) > 0) out.push({ name: nm, qty: N.f.q[nm] }); });
+  N.f.newNames.forEach((nm, i) => { if(nm && nm.trim() && N.f.newQty[i] > 0) out.push({ name: nm.trim(), qty: N.f.newQty[i], isNew: true }); });
+  return out;
+}
+function nCompute(){
+  const sold = {}; NP.forEach(p => { sold[p.k] = 0; });
+  const list = nSold();
+  list.forEach(it => NMAP.forEach(m => { if(m.sq === it.name) sold[m.k] += it.qty * m.mul; }));
+  const out = { _list: list }, f = N.f;
+  NP.forEach(p => {
+    const prev = N.st.stock[p.k];
+    const arrPieces = p.b ? f.arr[p.k] * p.per : f.arr[p.k];
+    const expect = prev.fz + prev.ch + arrPieces - sold[p.k];
+    const fzPieces = f.fzu[p.k] === "b" ? f.fz[p.k] * p.per : f.fz[p.k];
+    const actual = fzPieces + f.ch[p.k], diff = actual - expect;
+    out[p.k] = { sold: sold[p.k], arrPieces, expect, fzPieces, ch: f.ch[p.k], actual, diff,
+      waste: (diff < 0 && f.reason[p.k] === "waste") ? -diff : 0,
+      unexp: (diff !== 0 && f.reason[p.k] !== "waste") ? diff : 0 };
+  });
+  return out;
+}
+function nDiffs(){ const c = nCompute(); return NP.filter(p => c[p.k].diff !== 0); }
+function nBundles(p, pieces){ if(!p.b || pieces <= 0) return ""; const w = Math.floor(pieces / p.per), r = pieces % p.per; if(!w) return ""; return r === 0 ? "（" + w + p.b + "）" : "（" + w + p.b + "＋" + r + p.u + "）"; }
+function nTheo(){ return N.st.base + N.f.cash - N.st.pickup - N.f.payout; }
+function nWhy(){ let t = "起点 " + yenN(N.st.base) + (N.st.baseLabel ? "（" + N.st.baseLabel + "の実査）" : "") + " ＋ 現金売上 " + yenN(N.f.cash);
+  if(N.st.pickup) t += " − 回収 " + yenN(N.st.pickup); if(N.f.payout) t += " − 出金 " + yenN(N.f.payout); return t; }
+function nSplit(){ const raw = N.f.counted - nTheo();
+  if(N.f.counted > 0 && raw <= -N.st.pickupMin) return { pickup: N.st.pickup + (-raw), diff: 0, guessed: -raw };
+  return { pickup: N.st.pickup, diff: raw, guessed: 0 }; }
+function nSigned(d){ return d === 0 ? "±0" : (d > 0 ? "+" : "") + d.toLocaleString("ja-JP"); }
+function nReport(fmt){
+  if(N.final && N.final[fmt]) return N.final[fmt];
+  const c = nCompute(), t = nToday(), theo = nTheo(), sp = nSplit(), d = sp.diff, f = N.f;
+  const list = c._list.slice().sort((a, b) => b.qty - a.qty), total = list.reduce((a, b) => a + b.qty, 0);
+  const L = [t.label + " 日報", ""];
+  if(fmt !== "short"){
+    L.push("【売上】"); L.push("総売上 " + yenN(f.sales) + (total ? "（" + total + "点）" : "")); L.push("うち現金 " + yenN(f.cash)); L.push("");
+    L.push("【売れたもの】"); if(list.length) list.forEach(it => L.push(it.name + " " + it.qty)); else L.push("（なし）"); L.push("");
+  }
+  L.push("【在庫数】");
+  NP.forEach(p => { const r = c[p.k]; L.push("▼" + p.n); L.push("冷凍" + r.fzPieces + p.u + nBundles(p, r.fzPieces)); L.push("冷蔵" + r.ch + p.u); if(r.waste > 0) L.push("廃棄" + r.waste + p.u); });
+  const un = NP.filter(p => c[p.k].unexp !== 0);
+  if(un.length){ L.push(""); L.push("【差異】"); un.forEach(p => { const v = c[p.k].unexp; L.push(p.n + " " + (v > 0 ? "+" : "") + v + p.u + "（原因不明）"); }); }
+  if(fmt === "full"){ const a = []; NP.forEach(p => { if(f.arr[p.k] > 0) a.push(p.n + " " + f.arr[p.k] + (p.b || p.u)); }); if(a.length){ L.push(""); L.push("【入荷】"); L.push(a.join(" / ")); } }
+  if(fmt !== "short"){
+    L.push(""); L.push("【レジ締め】");
+    if(fmt === "full"){ L.push("理論 " + yenN(theo) + "（" + nWhy() + "）"); L.push("実査 " + yenN(f.counted)); L.push("差異 " + nSigned(d)); }
+    else L.push("実査 " + yenN(f.counted) + " ／ 差異 " + nSigned(d));
+    if(sp.guessed) L.push("※ " + yenN(sp.guessed) + " はレジから回収されたものとして記録しました");
+  }
+  return L.join("\n");
+}
+async function nSubmit(){
+  if(N.busy) return;
+  const c = nCompute(), t = nToday(), list = c._list, sp = nSplit(), f = N.f;
+  const entry = { d: t.iso, label: t.label, sales: f.sales, cash: f.cash, tx: list.reduce((a, b) => a + b.qty, 0), counted: f.counted,
+    base: N.st.base, pickup: sp.pickup, payout: f.payout, diff: sp.diff, staff: me() };
+  entry.detail = {};
+  NP.forEach(p => { entry.detail[p.k] = { fz: c[p.k].fzPieces, ch: c[p.k].ch, sold: c[p.k].sold, arr: c[p.k].arrPieces, expect: c[p.k].expect, waste: c[p.k].waste, gap: c[p.k].unexp }; });
+  entry.items = list.map(x => ({ n: x.name, q: x.qty }));
+  N.final = { std: nReport("std"), full: nReport("full"), short: nReport("short") };
+  N.busy = true; N.done = true; N.msg = "保存しています…"; N.ok = true; nippoRender();
+  try{
+    let j;
+    if(DEMO || !LIVE) j = { ok: true, demo: true };
+    else { const r = await fetch(CFG.nippoUrl, { method: "POST", body: JSON.stringify({ token: AUTH.token, action: "submit", entry }) }); j = await r.json(); }
+    if(j.error === "login_required"){ N.ok = false; N.msg = "ログインが切れました。報告文はコピーして使えます。"; }
+    else if(j.ok){ N.ok = true; N.msg = j.demo ? "見本なので保存はしていません。本番ではここで製造予定表に記録されます。" : (j.replaced ? "今日の分を上書きして保存しました。" : "保存しました。") + "明日はこの在庫とレジの金額が出発点になります。"; }
+    else { N.ok = false; N.msg = j.message || "保存できませんでした。報告文はコピーして使えます。"; }
+  }catch(e){ N.ok = false; N.msg = "通信できませんでした。電波を確かめて「もう一度送る」を押してください。報告文はコピーして使えます。"; N.retry = entry; }
+  N.busy = false; nippoRender();
+}
+async function nRetry(){ const entry = N.retry; if(!entry || N.busy) return; N.busy = true; N.msg = "送り直しています…"; nippoRender();
+  try{ const r = await fetch(CFG.nippoUrl, { method: "POST", body: JSON.stringify({ token: AUTH.token, action: "submit", entry }) }); const j = await r.json();
+    N.ok = !!j.ok; N.msg = j.ok ? "保存しました。" : (j.message || "保存できませんでした。"); if(j.ok) N.retry = null; }
+  catch(e){ N.ok = false; N.msg = "まだ通信できません。少し待ってからもう一度押してください。"; }
+  N.busy = false; nippoRender(); }
+/* 数の入力（−／＋つき） */
+function nStep(key, val){ return '<span class="stp"><button type="button" data-nst="-1" data-nk="' + esc(key) + '" aria-label="減らす">−</button><input type="number" inputmode="numeric" min="0" data-nf="' + esc(key) + '" value="' + (val || 0) + '"><button type="button" data-nst="1" data-nk="' + esc(key) + '" aria-label="増やす">＋</button></span>'; }
+function nGet(key){ const f = N.f, [a, b] = key.split(":");
+  if(a === "q") return f.q[b] || 0; if(a === "arr") return f.arr[b] || 0; if(a === "fz") return f.fz[b] || 0; if(a === "ch") return f.ch[b] || 0;
+  if(a === "nq") return f.newQty[+b] || 0; return f[a] || 0; }
+function nSet(key, v){ const f = N.f, [a, b] = key.split(":"); v = Math.max(0, Math.round(Number(v) || 0));
+  if(a === "q") f.q[b] = v; else if(a === "arr") f.arr[b] = v; else if(a === "fz") f.fz[b] = v; else if(a === "ch") f.ch[b] = v; else if(a === "nq") f.newQty[+b] = v; else f[a] = v; }
+function viewNippo(){
+  const back = '<a class="back" href="#check-close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>閉店作業</a>';
+  let h = '<div class="stack" id="nippoApp">' + back;
+  if(!CFG.nippoUrl && LIVE) return h + '<p class="empty">日報の送り先が設定されていません。</p></div>';
+  if(N.loaded && N.day !== bizDate() && !N.busy){ N.loaded = false; N.done = false; }
+  if(!N.loaded){ if(!N.loading && !N.err) setTimeout(nippoLoad, 0);
+    return h + (N.err ? '<p class="err">' + esc(N.err) + '</p><button type="button" class="btn full" data-nreload="1">もう一度読み込む</button>' : '<section class="card"><p class="sub" style="margin:0">Square の売上と、昨日の在庫・レジの金額を読み込んでいます…</p></section>') + "</div>"; }
+  const t = nToday(), c = nCompute(), dl = nDiffs(), f = N.f;
+  h += '<div class="nbar2"><b>' + esc(t.label) + ' の日報</b><span class="sub">' + esc(me() || "") + "</span></div>";
+  if(!N.done){
+    h += '<div class="nprog">' + NSTEPS.map((s, i) => '<i class="' + (i + 1 <= N.step ? "on" : "") + (i === 2 && !dl.length ? " skip" : "") + '"></i>').join("") + "</div>";
+    if(N.st.resubmit && N.step === 1) h += '<section class="card" style="border-color:var(--hand)"><p style="margin:0;font-size:14px"><b>今日の日報はもう送られています。</b>送り直すと、今日の分を上書きします（昨日の在庫とレジの金額から計算し直します）。</p></section>';
+  }
+  h += '<section class="card">';
+  if(N.done){
+    h += '<h2>送信' + (N.busy ? "中" : N.ok ? "しました" : "できませんでした") + "</h2>" +
+      '<p class="' + (N.ok ? "sub" : "err") + '" style="margin:0">' + esc(N.msg) + "</p>" +
+      (N.retry && !N.busy ? '<button type="button" class="btn full" data-nretry="1">もう一度送る</button>' : "") +
+      '<p class="sub" style="margin:4px 0 0">LINE に貼る報告文</p>' +
+      '<div class="seg" role="group" aria-label="報告文の形">' + [["std", "標準"], ["short", "在庫だけ"], ["full", "詳しく"]].map(x => '<button type="button" data-nfmt="' + x[0] + '" aria-pressed="' + (N.fmt === x[0]) + '">' + x[1] + "</button>").join("") + "</div>" +
+      '<pre class="nrep" id="nRep">' + esc(nReport(N.fmt)) + "</pre>" +
+      '<button type="button" class="btn full" data-ncopy="1">報告文をコピー</button></section>' +
+      '<a class="btn ghost" href="#home">ホームに戻る</a></div>';
+    return h;
+  }
+  if(N.step === 1){
+    h += '<h2>1 / 5 今日のデータ</h2><p class="sub" style="margin:0">売上と売れたものは Square から、入荷は発注表から自動で入っています。違っていたら直してください。</p>' +
+      (N.today.note ? '<p class="sub" style="margin:0;color:var(--sq)">' + esc(N.today.note) + "</p>" : "") +
+      '<div class="nrow"><span>総売上 <span class="pill sqp">自動</span></span><input type="number" inputmode="numeric" class="nmoney" data-nf="sales" value="' + f.sales + '" aria-label="総売上"></div>' +
+      '<div class="nrow"><span>うち現金 <span class="pill sqp">自動</span></span><input type="number" inputmode="numeric" class="nmoney" data-nf="cash" value="' + f.cash + '" aria-label="うち現金"></div></section>';
+    const names = nNames(), main = NMAP.map(m => m.sq), others = names.filter(n => main.indexOf(n) < 0);
+    const sold = others.filter(n => (f.q[n] || 0) > 0), rest = others.filter(n => !(f.q[n] > 0));
+    h += '<section class="card"><h2>売れたもの（ケーキなど）</h2>' + main.map(nm => '<div class="nrow"><span>' + esc(nm) + "</span>" + nStep("q:" + nm, f.q[nm]) + "</div>").join("") + "</section>" +
+      '<section class="card"><h2>入荷（今日届いた分）</h2>' + NP.map(p => '<div class="nrow"><span>' + esc(p.n) + ' <small class="sub">' + (p.b || p.u) + "</small></span>" + nStep("arr:" + p.k, f.arr[p.k]) + "</div>").join("") + "</section>" +
+      '<section class="card"><h2>そのほか売れたもの</h2>' + (sold.length ? sold.map(nm => '<div class="nrow"><span>' + esc(nm) + "</span>" + nStep("q:" + nm, f.q[nm]) + "</div>").join("") : '<p class="sub" style="margin:0">ありません。</p>') +
+      '<details><summary class="sub" style="cursor:pointer;padding:6px 0">ほかの商品・新しい商品（' + rest.length + "件）</summary>" +
+      rest.map(nm => '<div class="nrow"><span>' + esc(nm) + "</span>" + nStep("q:" + nm, f.q[nm]) + "</div>").join("") +
+      [0, 1].map(i => '<div class="nrow"><input type="text" data-nn="' + i + '" value="' + esc(f.newNames[i]) + '" placeholder="新しい商品名" aria-label="新しい商品名">' + nStep("nq:" + i, f.newQty[i]) + "</div>").join("") + "</details></section>";
+  }
+  if(N.step === 2){
+    h += '<h2>2 / 5 在庫を数える</h2><p class="sub" style="margin:0">いま冷凍庫と冷蔵庫にある数です。「あるはず」は昨日の在庫・入荷・売れた数から計算した数。解凍した数を覚えておく必要はありません。</p></section>';
+    NP.forEach(p => { const r = c[p.k], fu = f.fzu[p.k];
+      h += '<section class="card ncnt' + (r.diff === 0 ? " ok" : " bad") + '"><h2 style="letter-spacing:1px;font-size:16px;color:var(--ink);margin:0">' + esc(p.n) + '</h2><p class="sub" style="margin:0">あるはず <b>' + r.expect + p.u + "</b>" + esc(nBundles(p, r.expect)) + "</p>" +
+        '<div class="nrow"><span class="nlab">冷凍' + (p.b ? ' <span class="seg sm" role="group" aria-label="冷凍の単位"><button type="button" data-nfu="' + p.k + ':b" aria-pressed="' + (fu === "b") + '">' + p.b + '</button><button type="button" data-nfu="' + p.k + ':u" aria-pressed="' + (fu === "u") + '">' + p.u + "</button></span>" : "（" + p.u + "）") + "</span>" + nStep("fz:" + p.k, f.fz[p.k]) + "</div>" +
+        '<div class="nrow"><span class="nlab">冷蔵（' + p.u + "）</span>" + nStep("ch:" + p.k, f.ch[p.k]) + "</div>" +
+        '<p class="nres" id="nres-' + p.k + '">' + nResText(p, r) + "</p></section>"; });
+    return h + nNav() + "</div>";
+  }
+  if(N.step === 3){
+    h += '<h2>3 / 5 数が合わないもの</h2><p class="sub" style="margin:0">理由がわかるものだけ選んでください。わからなければそのままで大丈夫です。</p></section>';
+    dl.forEach(p => { const r = c[p.k], short = r.diff < 0;
+      h += '<section class="card"><div class="row"><h2 style="letter-spacing:1px;font-size:15px;color:var(--ink)">' + esc(p.n) + '</h2><span class="pill warn">' + (r.diff > 0 ? "+" : "") + r.diff + p.u + "</span></div>" +
+        '<p style="margin:0;font-size:14px">あるはず ' + r.expect + p.u + " に対して、数えたのは " + r.actual + p.u + "。" + Math.abs(r.diff) + p.u + (short ? " 足りません。" : " 多いです。") + "</p>" +
+        '<div class="chips">' + (short ? '<button type="button" class="chip' + (f.reason[p.k] === "waste" ? " on" : "") + '" data-nrs="' + p.k + ':waste">廃棄した</button>' : "") +
+        '<button type="button" class="chip' + (f.reason[p.k] === "other" ? " on" : "") + '" data-nrs="' + p.k + ':other">わからない</button></div></section>'; });
+    h += '<p class="sub">「廃棄した」は報告文に廃棄として載ります。「わからない」は差異として記録され、あとで原因を探せます。</p>';
+    return h + nNav() + "</div>";
+  }
+  if(N.step === 4){
+    const sp = nSplit();
+    h += '<h2>4 / 5 レジのお金</h2><p class="sub" style="margin:0">レジに入っている金額を数えて、そのまま入れてください。</p>' +
+      '<div class="nrow"><span>あるはずの金額 <span class="pill sqp">自動</span><small class="sub" id="nWhy" style="display:block">' + esc(nWhy()) + '</small></span><b class="nbig" id="nTheo">' + yenN(nTheo()) + "</b></div>" +
+      '<label class="label" for="nCounted">数えた金額</label><input type="number" inputmode="numeric" class="nmoney big" id="nCounted" data-nf="counted" value="' + (f.counted || "") + '" placeholder="例：41200">' +
+      '<div class="nrow"><span>差異</span><b class="nbig" id="nDiff" style="color:' + (sp.diff === 0 ? "var(--moss)" : "var(--warn)") + '">' + (f.counted ? nSigned(sp.diff) : "—") + "</b></div>" +
+      '<div id="nPick">' + nPickNote(sp) + "</div>" +
+      '<details><summary class="sub" style="cursor:pointer;padding:6px 0">出金があった場合（両替・支払いに使った分）</summary><input type="number" inputmode="numeric" class="nmoney" data-nf="payout" value="' + (f.payout || "") + '" placeholder="出金した金額" aria-label="出金"></details></section>';
+    return h + nNav() + "</div>";
+  }
+  if(N.step === 5){
+    const list = c._list.slice().sort((a, b) => b.qty - a.qty), tot = list.reduce((a, b) => a + b.qty, 0), sp = nSplit();
+    h += '<h2>5 / 5 これで送りますか？</h2>' +
+      '<div class="nrow"><span>売上</span><b>' + yenN(f.sales) + "（" + tot + "点）</b></div>" +
+      '<div class="nrow"><span>うち現金</span><b>' + yenN(f.cash) + "</b></div>" +
+      NP.map(p => { const r = c[p.k]; return '<div class="nrow"><span>' + esc(p.n) + '</span><span style="text-align:right">冷凍 <b>' + r.fzPieces + p.u + "</b>・冷蔵 <b>" + r.ch + p.u + "</b>" + (r.waste ? "・廃棄 <b>" + r.waste + p.u + "</b>" : "") + (r.unexp ? '・<b style="color:var(--warn)">差異' + (r.unexp > 0 ? "+" : "") + r.unexp + p.u + "</b>" : "") + "</span></div>"; }).join("") +
+      '<div class="nrow"><span>レジ</span><b>' + yenN(f.counted) + "（差異 " + nSigned(sp.diff) + "）</b></div>" +
+      (sp.guessed ? '<p class="sub" style="margin:0">' + yenN(sp.guessed) + " は運営がレジから回収したものとして記録します。</p>" : "") + "</section>";
+    return h + nNav(true) + "</div>";
+  }
+  return h + nNav() + "</div>";
+}
+function nResText(p, r){ return "数えた合計 " + r.actual + p.u + "　" + (r.diff === 0 ? '<b style="color:var(--moss)">ぴったり</b>' : '<b style="color:var(--warn)">' + (r.diff > 0 ? "+" : "") + r.diff + p.u + "</b>"); }
+function nPickNote(sp){ return sp.guessed ? '<section class="card" style="background:var(--hand-soft);border-color:var(--hand)"><p style="margin:0;font-size:14px"><b>' + yenN(sp.guessed) + " 少ないです。</b>運営がレジから現金を回収したものとして記録します。心当たりがなければ、もう一度数えてください。</p></section>" : ""; }
+function nNav(last){
+  return '<div class="nnav">' + (N.step > 1 ? '<button type="button" class="btn ghost" data-nback="1">もどる</button>' : "") +
+    '<button type="button" class="btn" data-nnext="1"' + (N.busy ? " disabled" : "") + ">" + (last ? "送信する" : "次へ") + "</button></div>";
+}
+function nippoRender(){ if(route() !== "nippo") return; const y = window.scrollY; $("#view").innerHTML = viewNippo(); window.scrollTo(0, y); }
+function nGo(step){ N.step = step; nippoRender(); window.scrollTo(0, 0); }
+function nNext(){
+  if(N.step === 5){ nSubmit(); return; }
+  if(N.step === 4 && !(N.f.counted > 0)){ toast("レジの金額を数えて入れてください"); const el = document.getElementById("nCounted"); if(el) el.focus(); return; }
+  let s = N.step + 1; if(s === 3 && !nDiffs().length) s = 4; nGo(s);
+}
+function nBack(){ let s = N.step - 1; if(s === 3 && !nDiffs().length) s = 2; nGo(Math.max(1, s)); }
+/* 入力中は描き直さず、計算の表示だけ更新する */
+function nippoInput(t){
+  if(!N.loaded || route() !== "nippo") return false;
+  if(t.dataset.nf){ nSet(t.dataset.nf, t.value); }
+  else if(t.dataset.nn != null){ N.f.newNames[+t.dataset.nn] = t.value; }
+  else return false;
+  nLive();
+  return true;
+}
+function nLive(){
+  if(N.step === 2){ const c = nCompute(); NP.forEach(p => { const el = document.getElementById("nres-" + p.k); if(el){ el.innerHTML = nResText(p, c[p.k]); const card = el.closest(".ncnt"); if(card){ card.classList.toggle("ok", c[p.k].diff === 0); card.classList.toggle("bad", c[p.k].diff !== 0); } } }); }
+  if(N.step === 4){ const sp = nSplit(); const a = document.getElementById("nTheo"), b = document.getElementById("nDiff"), w = document.getElementById("nWhy"), pk = document.getElementById("nPick");
+    if(a) a.textContent = yenN(nTheo()); if(w) w.textContent = nWhy(); if(b){ b.textContent = N.f.counted ? nSigned(sp.diff) : "—"; b.style.color = sp.diff === 0 ? "var(--moss)" : "var(--warn)"; } if(pk) pk.innerHTML = nPickNote(sp); }
+}
+function nippoClick(e){
+  if(route() !== "nippo") return false;
+  const st = e.target.closest("[data-nst]"); if(st){ const k = st.dataset.nk; nSet(k, nGet(k) + Number(st.dataset.nst)); const inp = st.parentNode.querySelector("input"); if(inp) inp.value = nGet(k); nLive(); return true; }
+  const fu = e.target.closest("[data-nfu]"); if(fu){ const [k, u] = fu.dataset.nfu.split(":"); const p = NP.find(x => x.k === k); const f = N.f; if(f.fzu[k] !== u){ f.fz[k] = u === "b" ? Math.round(f.fz[k] / p.per) : f.fz[k] * p.per; f.fzu[k] = u; } nippoRender(); return true; }
+  const rs = e.target.closest("[data-nrs]"); if(rs){ const [k, v] = rs.dataset.nrs.split(":"); N.f.reason[k] = N.f.reason[k] === v ? null : v; nippoRender(); return true; }
+  if(e.target.closest("[data-nnext]")){ nNext(); return true; }
+  if(e.target.closest("[data-nback]")){ nBack(); return true; }
+  if(e.target.closest("[data-nreload]")){ N.err = ""; nippoLoad(); return true; }
+  if(e.target.closest("[data-nretry]")){ nRetry(); return true; }
+  const fm = e.target.closest("[data-nfmt]"); if(fm){ N.fmt = fm.dataset.nfmt; nippoRender(); return true; }
+  if(e.target.closest("[data-ncopy]")){ const t = nReport(N.fmt); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("コピーしました。LINEに貼ってください")).catch(() => { const el = document.getElementById("nRep"); const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("選択しました。長押しでコピーしてください"); }); return true; }
+  return false;
+}
+
 function render(){
   const r = route();
   if($("#today")) $("#today").textContent = (function(){ const d = jstNow(); return (d.getUTCMonth()+1) + "月" + d.getUTCDate() + "日（" + WD[d.getUTCDay()] + "）"; })();
@@ -1530,7 +1813,7 @@ function render(){
   if(VIEWER() && (r.startsWith("check-") || r === "notes" || r === "nippo")){ location.hash = "#home"; return; }
   /* 日報は入力中に描き直すと消えるので、開いている間は中を触らない */
   if(r === "nippo"){
-    if(!document.getElementById("nippoFrame")) $("#view").innerHTML = viewNippo();
+    if(!document.getElementById("nippoApp")) $("#view").innerHTML = viewNippo();
     document.querySelectorAll(".tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.tab === "check" ? "page" : "false"));
     return;
   }
@@ -1559,6 +1842,7 @@ function render(){
 }
 
 $("#view").addEventListener("click", e => {
+  if(nippoClick(e)) return;
   const pb = e.target.closest(".punch"); if(pb){ doPunch(pb.dataset.a); return; }
   const wm = e.target.closest("[data-wm]"); if(wm){ if(W.dirty && !confirm("まだ送っていない変更があります。別の月に移りますか？")) return; W.month = wm.dataset.wm; W.loaded = ""; render(); return; }
   const wmo = e.target.closest("[data-wmode]"); if(wmo){ W.mode = wmo.dataset.wmode; render(); return; }
@@ -1614,8 +1898,8 @@ $("#view").addEventListener("submit", async e => {
   if(e.target.id === "taskForm"){ const v = $("#taskIn").value.trim(); if(!v) return $("#taskIn").focus(); if(await addNote("task", v)) $("#taskIn").value = ""; }
   if(e.target.id === "noteForm"){ const v = $("#noteIn").value.trim(); if(!v) return $("#noteIn").focus(); if(await addNote("note", v)) $("#noteIn").value = ""; }
 });
-$("#view").addEventListener("change", e => { wishCapture(e.target); if(e.target.id === "bCap"){ B.cap = Math.max(2, Math.min(15, +e.target.value || 5)); mem.set("cap", B.cap); render(); } if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
-$("#view").addEventListener("input", e => { wishCapture(e.target); if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
+$("#view").addEventListener("change", e => { if(nippoInput(e.target)) return; wishCapture(e.target); if(e.target.id === "bCap"){ B.cap = Math.max(2, Math.min(15, +e.target.value || 5)); mem.set("cap", B.cap); render(); } if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
+$("#view").addEventListener("input", e => { if(nippoInput(e.target)) return; wishCapture(e.target); if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0,0); });
 document.addEventListener("visibilitychange", () => { if(!document.hidden) load(); });
 setInterval(() => { if(!document.hidden && !(document.activeElement || document.body).matches("input,textarea")) load(); }, 30000);
