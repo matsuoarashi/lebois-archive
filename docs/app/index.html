@@ -364,6 +364,19 @@ input[type=number]{-moz-appearance:textfield}
 .pill.sqp{background:var(--sq-soft);color:var(--sq)}
 .nnav{display:grid;grid-template-columns:auto 1fr;gap:8px}.nnav .btn:only-child{grid-column:1/-1}
 .nrep{white-space:pre-wrap;background:var(--ground);border-radius:10px;padding:12px;font-size:14px;line-height:1.6;margin:0;font-family:inherit;max-height:46vh;overflow:auto}
+
+/* シフトの時間帯（帯で表示） */
+.tl{display:flex;flex-direction:column;gap:6px}
+.trow{display:grid;grid-template-columns:48px 1fr;gap:8px;align-items:center}
+.tname{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tname.gap{color:var(--warn)}
+.ttrack{position:relative;height:30px;background:var(--surface-2);border-radius:8px;overflow:hidden}
+.ttrack>i{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+.tticks{height:16px;background:none;overflow:visible}.tticks span{position:absolute;transform:translateX(-50%);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tbar{position:absolute;top:3px;bottom:3px;border-radius:6px;background:var(--moss-soft);border:1.5px solid var(--moss);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.tbar em{font-style:normal;font-size:11.5px;font-weight:700;color:var(--moss);white-space:nowrap;font-variant-numeric:tabular-nums;padding:0 4px}
+.tbar.on{background:var(--moss)}.tbar.on em{color:var(--btn-ink)}
+.tbar.vac{background:var(--warn-soft);border:1.5px dashed var(--warn)}.tbar.vac em{color:var(--warn)}
+.tnow{position:absolute;top:0;bottom:0;width:2px;background:var(--hand);z-index:2}
 </style>
 <!--/APP-->
 </head>
@@ -1003,6 +1016,23 @@ function viewAround(){
   }
   return h;
 }
+/* シフトを時間の帯で見せる（10時〜19時）。今日は今の時刻に線を引く */
+function shiftBars(items, isToday){
+  const A = 10, Z = 19, pos = t => Math.max(0, Math.min(100, (hm2n(t) - A) / (Z - A) * 100));
+  const ticks = [11, 13, 15, 17].map(h => '<span style="left:' + ((h - A) / (Z - A) * 100) + '%">' + h + "</span>").join("");
+  const grid = [11, 12, 13, 14, 15, 16, 17, 18].map(h => '<i style="left:' + ((h - A) / (Z - A) * 100) + '%"></i>').join("");
+  const n = jstNow(), now = n.getUTCHours() + n.getUTCMinutes() / 60;
+  const nowLine = isToday && now >= A && now <= Z ? '<b class="tnow" style="left:' + ((now - A) / (Z - A) * 100) + '%"></b>' : "";
+  const rows = items.slice().sort((a, b) => (a.start + a.end).localeCompare(b.start + b.end)).map(it => {
+    const l = pos(it.start), w = Math.max(4, pos(it.end) - l);
+    const on = isToday && now >= hm2n(it.start) && now < hm2n(it.end);
+    const who = it.vacant ? "空き" : it.note ? it.note : it.name;
+    return '<div class="trow"><span class="tname' + (it.vacant ? " gap" : "") + '">' + esc(who) + '</span><span class="ttrack">' + grid +
+      '<span class="tbar' + (it.vacant ? " vac" : "") + (on ? " on" : "") + '" style="left:' + l + "%;width:" + w + '%"><em>' + esc(it.start) + "–" + esc(it.end) + "</em></span>" + nowLine + "</span></div>";
+  }).join("");
+  return '<div class="tl"><div class="trow thead"><span class="tname"></span><span class="ttrack tticks">' + ticks + "</span></div>" + rows + "</div>" +
+    (items.some(i => i.vacant) ? '<p class="sub" style="margin:0;color:var(--warn)">点線は人が足りない枠です。</p>' : "");
+}
 function shiftItems(items){
   return '<ul class="shifts">' + items.map(it => '<li><span class="pill mute">' + esc(it.slot) + '</span><span class="tm">' + esc(it.start) + "〜" + esc(it.end) + "</span>" +
     (it.vacant ? '<span class="gap">人が足りません</span>' : it.note ? '<span class="nt">' + esc(it.note) + "</span>" : '<span class="nm">' + esc(it.name) + "</span>") +
@@ -1075,14 +1105,14 @@ function viewShiftCard(){
   const gaps = SH.days.filter(d => d.items.some(i => i.vacant)).length;
   const isMon = jstNow().getUTCDay() === 1;
   return '<section class="card"><div class="row"><h2>今日のシフト</h2><a class="btn sm ghost" href="#shift">今週を見る</a></div>' +
-    (t ? shiftItems(t.items) : '<p class="sub">' + (isMon ? "今日は定休日です。" : "今日のシフトは入っていません。") + "</p>") +
+    (t ? shiftBars(t.items, true) : '<p class="sub">' + (isMon ? "今日は定休日です。" : "今日のシフトは入っていません。") + "</p>") +
     (gaps ? '<p style="margin:0"><span class="pill warn">人が足りない日が' + gaps + "日あります</span></p>" : "") +
     (SH.error ? '<p class="sub">' + esc(SH.error) + "</p>" : "") + "</section>";
 }
 function viewShift(){
   const today = bizDate().replace(/-/g, "/");
   return '<div class="stack"><a class="back" href="#home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>ホーム</a><h1>シフト（2週間）</h1>' +
-    (SH.days.length ? SH.days.map(d => '<section class="card sec"><div class="dayh' + (d.date === today ? " today" : "") + '"><b>' + esc(dayLabel(d.date)) + "</b>" + (d.date === today ? '<span class="pill">今日</span>' : "") + (d.items.some(i => i.vacant) ? '<span class="pill warn">人が足りない枠あり</span>' : "") + "</div>" + shiftItems(d.items) + "</section>").join("") : '<p class="empty">表示できるシフトがありません。</p>') +
+    (SH.days.length ? SH.days.map(d => '<section class="card sec"><div class="dayh' + (d.date === today ? " today" : "") + '"><b>' + esc(dayLabel(d.date)) + "</b>" + (d.date === today ? '<span class="pill">今日</span>' : "") + (d.items.some(i => i.vacant) ? '<span class="pill warn">人が足りない枠あり</span>' : "") + "</div>" + shiftBars(d.items, d.date === today) + "</section>").join("") : '<p class="empty">表示できるシフトがありません。</p>') +
     '<p class="sub">' + ((SH.appMonths || []).length ? (SH.appMonths.map(monthLabel).join("・") + "はアプリで作ったシフトです。それ以外の月は") : "") + 'シフト登録表から読んでいます（変更は15分ほどでここに出ます）。月曜は定休日です。' + (SH.updated && SH.updated !== "見本" ? "（最終取込 " + esc(SH.updated) + "）" : "") + "</p>" +
     (SH.error ? '<p class="sub">' + esc(SH.error) + "</p>" : "") + "</div>";
 }
