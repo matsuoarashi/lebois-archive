@@ -1168,7 +1168,7 @@ const LG = { list: null, pick: null, pin: "", first: "", step: "pick", msg: "", 
 function viewLogin(){
   if(!LG.list){ loadStaffList(); return '<div class="login"><p class="sub">読み込み中…</p></div>'; }
   const p = LG.list.find(x => x.id === LG.pick);
-  let h = '<div class="login"><h1>ログイン</h1><p class="sub">自分の名前を選んで、4桁の番号を入れてください。</p>' +
+  let h = '<div class="login"><h1>ログイン</h1><p class="sub">' + (KANRI ? "管理者の名前を選んで、スタッフ画面と同じ4桁の番号を入れてください。" : "自分の名前を選んで、4桁の番号を入れてください。") + "</p>" +
     '<div class="names" id="lgNames">' + LG.list.map(x => '<button type="button" data-id="' + esc(x.id) + '" class="' + (x.id === LG.pick ? "on" : "") + '">' + esc(x.name) + "</button>").join("") + "</div>";
   if(p){
     const lead = !p.has_pin ? (LG.step === "confirm" ? "確認のため、同じ番号をもう一度" : "はじめてなので、自分で4桁の番号を決めてください（誕生日など人に分かる番号は避けてください）") : p.name + " さんの番号";
@@ -1179,7 +1179,7 @@ function viewLogin(){
   return h + '<p class="sub">番号を忘れたときは店長に伝えてください。消してもらうと、次に入るときに決め直せます。</p></div>';
 }
 async function loadStaffList(){
-  try{ LG.list = await rpc("lb_staff_list", {}); }catch(e){ LG.list = []; LG.msg = e.message; }
+  try{ LG.list = await rpc(KANRI ? "lb_admin_list" : "lb_staff_list", {}); }catch(e){ LG.list = []; LG.msg = e.message; }  // 管理者アプリは最初に設定した管理者だけを出す
   render();
 }
 async function pressKey(k){
