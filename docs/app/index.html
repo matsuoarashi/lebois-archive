@@ -17,13 +17,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="le bois">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<script>/* 管理者アプリ（?app=kanri）はホーム画面のアイコンと名前を分ける（オリオンと同じ作り） */
-(function(){ if(!/[?&]app=kanri\b/.test(location.search)) return;
-  var q = function(s){ return document.querySelector(s); };
-  q('link[rel="manifest"]').setAttribute("href", "manifest-kanri.webmanifest");
-  q('link[rel="apple-touch-icon"]').setAttribute("href", "icon-kanri-180.png");
-  q('meta[name="apple-mobile-web-app-title"]').setAttribute("content", "le bois 管理");
-  document.title = "le bois 管理"; })();</script>
+<script>/* 管理者アプリは別の入口（/lebois/kanri/）。古いリンク（?app=kanri）はそちらへ送る */
+(function(){ if(!window.LB_KANRI && /[?&]app=kanri\b/.test(location.search)) location.replace("../kanri/" + location.hash); })();</script>
 <!--APP-->
 <title>le bois スタッフ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -980,7 +975,7 @@ async function publishBuild(){
 function viewWishCard(){
   if(VIEWER()) return "";
   const nm = addMonth(monthKey(), 1);
-  return '<section class="card"><div class="row"><h2>シフト</h2><span>' + '<a class="btn sm ghost" href="#wish">希望を出す</a>' + (IS_MGR() ? ' <a class="btn sm ghost" href="#build">作る</a>' : "") + "</span></div>" +
+  return '<section class="card"><div class="row"><h2>シフト</h2><span>' + '<a class="btn sm ghost" href="#wish">希望を出す</a>' + (IS_MGR() && LIVE ? ' <a class="btn sm ghost" href="../kanri/#build">作る（管理者アプリ）</a>' : "") + "</span></div>" +
     '<p class="sub" style="margin:0">' + esc(monthLabel(nm)) + "の希望をアプリから出せます。</p></section>";
 }
 
@@ -1016,7 +1011,7 @@ function demoPunch(kind, near, dist, fix){
   const t = D.rows[today], open = t && !t.out && t.breaks.find(b => !b.e);
   return { enabled: true, today, next: !t ? ["clock_in"] : t.out ? [] : open ? ["break_end"] : ["break_begin", "clock_out"],
     cur: t ? demoAttendJson(t) : null, recent: Object.values(D.rows).sort((a, b) => a.ymd < b.ymd ? 1 : -1).map(demoAttendJson),
-    fixes: D.fixes, store: { lat: 35.6797, lng: 139.8001, r: 150 } };
+    fixes: D.fixes, store: { lat: 35.679783, lng: 139.804794, r: 150 } };
 }
 function punchApply(j){
   j = j || {};
@@ -1086,7 +1081,8 @@ function viewPunch(){
     (btns ? '<div class="punchrow">' + btns + "</div>" : '<p class="sub" style="margin:0">今日の打刻は終わっています。おつかれさまでした。</p>') +
     (PC.msg ? '<p class="sub" style="margin:10px 0 0">' + esc(PC.msg) + "</p>" : "") +
     (PC.error ? '<p class="sub" style="margin:10px 0 0;color:var(--warn)">' + esc(PC.error) + "</p>" : "") +
-    (PC.store ? "" : '<p class="sub" style="margin:10px 0 0">店の位置がまだ決まっていないので、位置の確認はしていません。</p>') + "</section>";
+    (PC.store ? "" : '<p class="sub" style="margin:10px 0 0">店の位置がまだ決まっていないので、位置の確認はしていません。</p>') +
+    (CFG.punchTrial ? '<p class="sub" style="margin:10px 0 0;color:var(--hand)">お試し中です。記録はアプリの中だけで、freee にはまだ送りません。いつもどおり freee でも打刻してください。</p>' : "") + "</section>";
 }
 /* スタッフ：直近の記録と修正の申請 */
 function viewPunchLog(){
@@ -1165,7 +1161,8 @@ function viewKAttend(){
   const prev = (() => { const [y, m] = mk.split("-").map(Number); return m === 1 ? (y - 1) + "-12" : y + "-" + String(m - 1).padStart(2, "0"); })();
   const next = (() => { const [y, m] = mk.split("-").map(Number); return m === 12 ? (y + 1) + "-01" : y + "-" + String(m + 1).padStart(2, "0"); })();
   const head = '<div class="stack"><div class="row"><h1>勤怠</h1><button class="btn sm ghost" type="button" data-ktreload="1">読み直す</button></div>' +
-    '<p class="sub" style="margin:0">アプリで打刻した記録です。退勤まで済んだ日は、1日1回 freee の勤怠に書き込みます（並走中は freee 側で手で直さないでください）。</p>' +
+    (CFG.punchTrial ? '<p class="sub" style="margin:0;color:var(--hand)">お試し中：アプリで打刻した記録はまだ freee に送っていません。試す人も、いつもどおり freee で打刻しています。</p>' :
+      '<p class="sub" style="margin:0">アプリで打刻した記録です。退勤まで済んだ日は、1日1回 freee の勤怠に書き込みます（並走中は freee 側で手で直さないでください）。</p>') +
     (KT.err ? '<p class="err">' + esc(KT.err) + "</p>" : "");
   if(!D) return head + '<p class="sub">読み込んでいます…</p></div>';
   const pend = (D.fixes || []).filter(f => f.status === "pending");
@@ -2200,7 +2197,7 @@ function nippoClick(e){
 /* ================= 管理者アプリ（?app=kanri・2026-11-06）=================
  * オリオンと同じく、スタッフと同じ名前＋番号で入り、管理者（manager）だけが使える。
  * 時給・人件費の明細はオーナー（lb_staff.owner）だけ。ル・ボアでは店長に見せない（松尾さん 11/6）。 */
-const KANRI = /[?&]app=kanri\b/.test(location.search);
+const KANRI = !!window.LB_KANRI;  // 管理者アプリ（/lebois/kanri/。tools/build_kanri.py がこのファイルから作る）
 const KA = { dash: null, today: null, err: "", at: 0, loading: false, owner: false };
 (function(){ const c = mem.get("kdash", null); if(c){ KA.dash = c.dash; KA.today = c.today; } })();
 async function loadK(force){
@@ -2410,7 +2407,7 @@ function render(){
   else if(r === "routine"){ if(VIEWER()){ location.hash = "#home"; return; } html = viewRoutine(); tab = "home"; }
   else if(r === "shift"){ html = viewShift(); tab = "home"; }
   else if(r === "wish"){ if(VIEWER()){ location.hash = "#home"; return; } html = viewWish(); tab = "home"; }
-  else if(r === "build"){ html = viewBuild(); tab = "home"; }
+  else if(r === "build"){ if(LIVE){ location.replace("../kanri/#build"); return; } html = viewBuild(); tab = "home"; }
   else if(r === "punch"){ html = viewPunchLog(); tab = "home"; }
   else if(r === "manual"){ html = viewManual(); tab = "manual"; }
   else if(r.startsWith("m-")){ html = viewManualItem(r.slice(2)); tab = "manual"; }

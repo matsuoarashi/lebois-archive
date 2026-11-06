@@ -14,6 +14,8 @@ window.LB_CONFIG = {
   /* 2026/11/3 停止中：freee のいまのプランでは外部からの打刻（タイムレコーダー）が使えない（スタンダード以上が必要）。
    * 再開するときは下の punchUrl に戻す："https://script.google.com/macros/s/AKfycbycJWjckVLoJAhH7svkzOYbwxZMz1qcGtIgFBPfe9ZdUduyI9XhzoDfmk8oN5JV6FQ/exec" */
   punchUrl: "",
+  /* 2026/11/6〜 アプリでの打刻（Supabase）をお試し中。true のあいだは「freee にはまだ送りません」と出す */
+  punchTrial: true,
   /* 日報（Apps Script のウェブアプリ・スタッフ用URL） */
   nippoUrl: "https://script.google.com/macros/s/AKfycbzWHRojz5m8SLr7n5PSXRKKZuY6_5wG6_sjsImIf9iq5im3l_BDeoJe5vnDsnjX9oeN/exec"
 };
