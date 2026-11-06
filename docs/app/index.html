@@ -176,6 +176,7 @@ input[type=text]{width:100%;min-height:46px;border:1px solid var(--line);border-
 /* tab bar */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
 .tabs nav{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+.ktabs nav{grid-template-columns:repeat(6,minmax(0,1fr))}
 .tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 10px;font-size:11px;color:var(--muted);text-decoration:none;position:relative}
 .tabs a[aria-current="page"]{color:var(--moss);font-weight:700}
 .tabs svg{width:22px;height:22px}
@@ -200,6 +201,7 @@ input[type=text]{width:100%;min-height:46px;border:1px solid var(--line);border-
 .names button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:6px 14px;min-height:38px}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--ground);padding:8px 16px;border-radius:10px;font-size:13px;z-index:40;max-width:calc(100% - 32px)}
 .err{color:var(--warn);font-size:13px}
+.kfix{padding:10px 0;border-top:1px solid var(--line-soft)}.kfix:first-of-type{border-top:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 #askIn,select[name=category],input[name=q],input[name=keywords],textarea[name=a],#rtForm input[name=title],#rtForm textarea,#rtForm select{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
 textarea[name=a],#rtForm textarea{min-height:96px}
@@ -449,6 +451,7 @@ input[type=number]{-moz-appearance:textfield}
   <a href="#k-today" data-tab="k-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>今日</a>
   <a href="#build" data-tab="build"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>シフト作成</a>
   <a href="#shift" data-tab="shift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h13"/></svg>2週間</a>
+  <a href="#k-attend" data-tab="k-attend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>勤怠</a>
   <a href="#k-docs" data-tab="k-docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13l2 2 4-4"/></svg>書類</a>
   <a href="./" data-tab="staff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>スタッフ画面</a>
 </nav></div>
@@ -982,47 +985,223 @@ function viewWishCard(){
 }
 
 
-/* ---------- 打刻（アプリ → Apps Script → freee）。試行中は対象の人にだけ出る ---------- */
-const PC = { enabled: false, available: [], clocks: [], msg: "", error: "", busy: false, at: 0 };
+/* ---------- 打刻（2026-11-06〜：アプリ → Supabase。承認済みの分を勤怠取込の Apps Script が freee へ書き込む） ----------
+ * 各自のスマホで押す。押したときに位置を測り、「店の近くだったか」と距離（10m単位）だけを送る。緯度・経度は送らない。
+ * 位置が取れなくても打刻はできる（「位置の確認なし」の印が付き、管理者が見る）。直すときは修正の申請 → 管理者が承認。 */
+const PC = { enabled: false, next: [], cur: null, recent: [], fixes: [], store: null, msg: "", error: "", busy: false, at: 0, fix: null };
 const PUNCH_LABEL = { clock_in: "出勤", break_begin: "休憩に入る", break_end: "休憩から戻る", clock_out: "退勤" };
-async function punchCall(action){
-  if(DEMO){
-    const now = jstNow(), hm = String(now.getUTCHours()).padStart(2,"0") + ":" + String(now.getUTCMinutes()).padStart(2,"0");
-    if(action !== "status"){ PC.clocks.push({ type: action, label: PUNCH_LABEL[action], at: hm }); PC.msg = PUNCH_LABEL[action] + "を記録しました（" + hm + "・見本）"; }
-    const last = PC.clocks.length ? PC.clocks[PC.clocks.length-1].type : "";
-    PC.enabled = true;
-    PC.available = !last || last === "clock_out" ? (last ? [] : ["clock_in"]) : last === "break_begin" ? ["break_end"] : ["break_begin", "clock_out"];
-    return;
+const PUNCH_ERR = { already_in: "すでに出勤しています", already_done: "今日はもう退勤しています。直すときは「打刻の記録・修正」から申請してください", not_in: "まだ出勤していません", on_break: "休憩中です", not_on_break: "休憩中ではありません", not_enabled: "アプリでの打刻はまだ始まっていません", need_reason: "理由を書いてください", bad_date: "その日は申請できません" };
+function punchErr(e){ const m = String(e && e.message || e); const k = Object.keys(PUNCH_ERR).find(x => m.indexOf(x) >= 0); return k ? PUNCH_ERR[k] : m; }
+function hmNow(){ const n = jstNow(); return String(n.getUTCHours()).padStart(2,"0") + ":" + String(n.getUTCMinutes()).padStart(2,"0"); }
+function hmMin(s){ const m = /^(\d{1,2}):(\d{2})$/.exec(s || ""); return m ? +m[1]*60 + +m[2] : null; }
+function minHM(n){ if(n == null) return ""; return Math.floor(n/60) + ":" + String(n % 60).padStart(2,"0"); }
+/* 見本（?demo=1）：端末の中だけで同じ動きをする */
+function demoAttendJson(a){
+  const br = a.breaks || [], bm = br.reduce((t, b) => t + ((hmMin(b.e) ?? hmMin(hmNow())) - hmMin(b.s)), 0);
+  let wm = null; if(a.in && a.out){ let d = hmMin(a.out) - hmMin(a.in); if(d < 0) d += 1440; wm = d - br.filter(b => b.e).reduce((t, b) => t + (hmMin(b.e) - hmMin(b.s)), 0); }
+  return Object.assign({}, a, { break_min: bm, work_min: wm, synced: !!a.synced });
+}
+function demoPunch(kind, near, dist, fix){
+  const D = mem.get("punchDemo", null) || { rows: {}, fixes: [] }, today = bizDate(), r = D.rows[today];
+  if(kind === "clock_in"){ if(r) throw new Error(r.out ? "already_done" : "already_in"); D.rows[today] = { ymd: today, in: hmNow(), out: null, breaks: [], in_near: near, in_dist: dist, edited: false, note: "" }; }
+  else if(kind === "fix"){ D.fixes.unshift(Object.assign({ id: "f" + Date.now(), status: "pending" }, fix)); }
+  else if(kind){
+    if(!r || r.out) throw new Error("not_in");
+    const open = r.breaks.find(b => !b.e);
+    if(kind === "break_begin"){ if(open) throw new Error("on_break"); r.breaks.push({ s: hmNow(), e: null }); }
+    else if(kind === "break_end"){ if(!open) throw new Error("not_on_break"); open.e = hmNow(); }
+    else if(kind === "clock_out"){ if(open) open.e = hmNow(); r.out = hmNow(); r.out_near = near; r.out_dist = dist; }
   }
-  if(!CFG.punchUrl || !AUTH.token) return;
-  const r = await fetch(CFG.punchUrl, { method: "POST", body: JSON.stringify({ token: AUTH.token, action }) });
-  const j = await r.json();
-  if(j.error === "login_required"){ logout(); return; }
-  PC.enabled = !!j.enabled; PC.error = j.ok ? "" : (j.error || "");
-  if(j.ok){ PC.available = j.available || []; PC.clocks = j.clocks || []; PC.msg = j.msg || ""; }
+  mem.set("punchDemo", D);
+  const t = D.rows[today], open = t && !t.out && t.breaks.find(b => !b.e);
+  return { enabled: true, today, next: !t ? ["clock_in"] : t.out ? [] : open ? ["break_end"] : ["break_begin", "clock_out"],
+    cur: t ? demoAttendJson(t) : null, recent: Object.values(D.rows).sort((a, b) => a.ymd < b.ymd ? 1 : -1).map(demoAttendJson),
+    fixes: D.fixes, store: { lat: 35.6797, lng: 139.8001, r: 150 } };
+}
+function punchApply(j){
+  j = j || {};
+  PC.enabled = !!j.enabled; PC.next = j.next || []; PC.cur = j.cur || null; PC.recent = j.recent || []; PC.fixes = j.fixes || []; PC.store = j.store || null; PC.error = "";
 }
 async function loadPunch(force){
   if(!force && Date.now() - PC.at < 2*60e3) return;
   PC.at = Date.now();
-  try{ await punchCall("status"); }catch(e){ PC.error = "打刻の状態を読み込めませんでした"; }
+  try{
+    if(DEMO){ punchApply(demoPunch(null)); return; }
+    if(!LIVE || !AUTH.token || VIEWER()) return;
+    punchApply(await rpc("lb_punch_me", { p_token: AUTH.token }));
+  }catch(e){ PC.error = "打刻の状態を読み込めませんでした"; }
+}
+/* 位置：店の位置が決まっていれば距離を測る。取れなければ null（打刻は止めない） */
+function distM(a, b){ const R = 6371000, r = x => x * Math.PI / 180, dLa = r(b.lat - a.lat), dLo = r(b.lng - a.lng);
+  const h = Math.sin(dLa/2)**2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLo/2)**2; return 2 * R * Math.asin(Math.sqrt(h)); }
+function getPos(ms){
+  return new Promise(res => {
+    if(!navigator.geolocation){ res(null); return; }
+    let done = false; const fin = v => { if(!done){ done = true; res(v); } };
+    setTimeout(() => fin(null), ms || 9000);
+    navigator.geolocation.getCurrentPosition(p => fin({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy || 0 }), () => fin(null), { enableHighAccuracy: true, timeout: (ms || 9000) - 500, maximumAge: 60000 });
+  });
+}
+async function whereNow(){
+  if(!PC.store) return { near: null, dist: null };
+  const p = await getPos();
+  if(!p) return { near: null, dist: null };
+  const d = distM(p, PC.store);
+  return { near: d - Math.min(p.acc, 100) <= (PC.store.r || 150), dist: Math.round(d) };
 }
 async function doPunch(action){
   if(PC.busy) return;
   if(action === "clock_out" && !confirm("退勤を記録しますか？")) return;
-  PC.busy = true; PC.msg = ""; render();
-  try{ await punchCall(action); if(PC.msg) toast(PC.msg); }
-  catch(e){ PC.error = "通信できませんでした。もう一度押すか、freee のアプリで打刻してください"; }
-  PC.busy = false; PC.at = Date.now(); render();
+  PC.busy = true; PC.msg = "位置を確かめています…"; render();
+  try{
+    const w = await whereNow();
+    PC.msg = "記録しています…"; render();
+    const j = DEMO ? demoPunch(action, w.near, w.dist) : await rpc("lb_punch", { p_token: AUTH.token, p_kind: action, p_near: w.near, p_dist: w.dist });
+    punchApply(j);
+    toast(PUNCH_LABEL[action] + "を記録しました（" + hmNow() + "）" + (w.near === true ? "" : w.near === false ? "。店から離れた場所でした" : "。位置は確かめられませんでした"));
+  }catch(e){ PC.error = punchErr(e); }
+  PC.msg = ""; PC.busy = false; PC.at = Date.now(); render();
+}
+function attendLine(a){
+  const br = (a.breaks || []).map(b => b.s + "〜" + (b.e || "")).join("、");
+  return (a.in || "--:--") + "〜" + (a.out ? (a.in_next ? "翌" : "") + a.out : "") + (br ? "　休憩 " + br : "");
+}
+function attendFlags(a, mgr){
+  const f = [];
+  if(a.in && !a.out && a.ymd < bizDate()) f.push('<span class="pill warn">退勤なし</span>');
+  if(a.in_near === false || a.out_near === false) f.push('<span class="pill warn">店の外' + (mgr ? "（" + [a.in_near === false ? "出" + a.in_dist + "m" : "", a.out_near === false ? "退" + a.out_dist + "m" : ""].filter(Boolean).join("・") + "）" : "") + "</span>");
+  else if(a.in && (a.in_near == null || (a.out && a.out_near == null))) f.push('<span class="pill mute">位置の確認なし</span>');
+  if(a.edited) f.push('<span class="pill mute">修正済み</span>');
+  if(mgr && a.out){ f.push(a.synced ? '<span class="pill mute">freee 済</span>' : a.sync_note ? '<span class="pill warn" title="' + esc(a.sync_note) + '">freee に送れず</span>' : '<span class="pill mute">freee 未送信</span>'); }
+  return f.join(" ");
 }
 function viewPunch(){
   if(!PC.enabled) return "";
-  const done = PC.clocks.map(c => '<span class="pill mute">' + esc(c.label) + " " + esc(c.at) + "</span>").join(" ");
-  const btns = PC.available.map(a => '<button type="button" class="btn' + (a === "clock_out" || a === "break_begin" ? " ghost" : "") + ' punch" data-a="' + a + '"' + (PC.busy ? " disabled" : "") + ">" + esc(PUNCH_LABEL[a] || a) + "</button>").join("");
-  return '<section class="card"><div class="row"><h2>打刻</h2><span class="pill mute">freee に記録</span></div>' +
-    (done ? '<p style="margin:0 0 10px;display:flex;gap:6px;flex-wrap:wrap">' + done + "</p>" : '<p class="sub" style="margin:0 0 10px">今日はまだ打刻していません。</p>') +
+  const a = PC.cur, onBreak = PC.next.indexOf("break_end") >= 0;
+  const btns = PC.next.map(k => '<button type="button" class="btn' + (k === "clock_out" || k === "break_begin" ? " ghost" : "") + ' punch" data-a="' + k + '"' + (PC.busy ? " disabled" : "") + ">" + esc(PUNCH_LABEL[k]) + "</button>").join("");
+  const state = !a ? '<p class="sub" style="margin:0 0 10px">今日はまだ打刻していません。</p>' :
+    '<p style="margin:0 0 10px;font-variant-numeric:tabular-nums"><b>' + esc(attendLine(a)) + "</b>" + (onBreak ? '　<span class="pill">休憩中</span>' : "") + (a.out && a.work_min != null ? '　<span class="sub">実働 ' + minHM(a.work_min) + "</span>" : "") + "</p>";
+  const pend = PC.fixes.filter(f => f.status === "pending").length;
+  return '<section class="card"><div class="row"><h2>打刻</h2><a class="btn sm ghost" href="#punch">記録・修正' + (pend ? "（申請中 " + pend + "）" : "") + "</a></div>" + state +
     (btns ? '<div class="punchrow">' + btns + "</div>" : '<p class="sub" style="margin:0">今日の打刻は終わっています。おつかれさまでした。</p>') +
+    (PC.msg ? '<p class="sub" style="margin:10px 0 0">' + esc(PC.msg) + "</p>" : "") +
     (PC.error ? '<p class="sub" style="margin:10px 0 0;color:var(--warn)">' + esc(PC.error) + "</p>" : "") +
-    '<p class="sub" style="margin:10px 0 0">押し間違えたときは店長に伝えてください（freee で直します）。</p></section>';
+    (PC.store ? "" : '<p class="sub" style="margin:10px 0 0">店の位置がまだ決まっていないので、位置の確認はしていません。</p>') + "</section>";
+}
+/* スタッフ：直近の記録と修正の申請 */
+function viewPunchLog(){
+  if(!PC.enabled) return '<div class="stack"><h1>打刻の記録</h1><p class="sub">アプリでの打刻はまだ始まっていません。</p><a class="btn ghost" href="#home">ホームへ</a></div>';
+  const F = PC.fix;
+  const fixForm = F ? '<section class="card"><h2>' + esc(mdS(F.ymd.replace(/-/g, "/"))) + " の修正を申請</h2>" +
+    '<form id="fixForm" class="stack" style="gap:8px">' +
+    '<label class="label" for="fxYmd">日付</label><input type="date" id="fxYmd" value="' + esc(F.ymd) + '" max="' + esc(bizDate()) + '">' +
+    '<div class="row" style="gap:8px"><span style="flex:1"><label class="label" for="fxIn">出勤</label><input type="time" id="fxIn" value="' + esc(F.in || "") + '"></span><span style="flex:1"><label class="label" for="fxOut">退勤</label><input type="time" id="fxOut" value="' + esc(F.out || "") + '"></span></div>' +
+    '<div class="row" style="gap:8px"><span style="flex:1"><label class="label" for="fxBs">休憩の始め</label><input type="time" id="fxBs" value="' + esc(F.bs || "") + '"></span><span style="flex:1"><label class="label" for="fxBe">休憩の終わり</label><input type="time" id="fxBe" value="' + esc(F.be || "") + '"></span></div>' +
+    '<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="fxNoBrk" style="width:20px;height:20px;min-height:0;margin:0"' + (F.nobrk ? " checked" : "") + "> 休憩はとっていない</label>" +
+    '<label class="label" for="fxWhy">理由（例：出勤を押し忘れた）</label><input type="text" id="fxWhy" maxlength="100" value="' + esc(F.reason || "") + '">' +
+    '<p class="sub" style="margin:0">空にした時刻はそのままです。管理者が承認すると記録が直ります。</p>' +
+    '<div class="row" style="gap:8px"><button class="btn ghost" type="button" data-fxcancel="1">やめる</button><button class="btn" type="submit">申請する</button></div></form></section>' : "";
+  const fx = PC.fixes.map(f => '<li><div class="body"><span>' + esc(mdS(String(f.ymd).replace(/-/g, "/"))) + "　" + esc([f.in && "出勤 " + f.in, f.out && "退勤 " + f.out, f.bs === "-" ? "休憩なし" : f.bs && "休憩 " + f.bs + "〜" + f.be].filter(Boolean).join("・")) + '</span><span class="sub">' + esc(f.reason) + "</span></div>" +
+    '<span class="pill' + (f.status === "pending" ? "" : " mute") + '">' + ({ pending: "申請中", approved: "直りました", rejected: "見送り" }[f.status] || "") + "</span></li>").join("");
+  const rows = PC.recent.map(a => '<li><div class="body"><span style="font-variant-numeric:tabular-nums"><b>' + esc(mdS(String(a.ymd).replace(/-/g, "/"))) + "</b>　" + esc(attendLine(a)) + "</span>" +
+    '<span class="sub">' + (a.work_min != null ? "実働 " + minHM(a.work_min) + " " : "") + attendFlags(a, false) + "</span></div>" +
+    '<button class="btn sm ghost" type="button" data-fx="' + esc(a.ymd) + '">直す</button></li>').join("");
+  return '<div class="stack"><div class="row"><h1>打刻の記録</h1><a class="btn sm ghost" href="#home">戻る</a></div>' + fixForm +
+    (fx ? '<section class="card"><h2>修正の申請</h2><ul class="lines">' + fx + "</ul></section>" : "") +
+    '<section class="card"><div class="row"><h2>この2週間</h2><button class="btn sm ghost" type="button" data-fx="' + esc(bizDate()) + '" data-fxnew="1">打刻を忘れた日</button></div>' +
+    (rows ? '<ul class="lines">' + rows + "</ul>" : '<p class="sub" style="margin:0">まだ記録がありません。</p>') + "</section></div>";
+}
+function fixOpen(ymd, isNew){
+  const ff = document.getElementById("fixForm"); if(ff) ff.remove();
+  const a = !isNew && PC.recent.find(x => x.ymd === ymd);
+  const b = a && a.breaks && a.breaks[0];
+  PC.fix = { ymd, in: a ? a.in || "" : "", out: a ? a.out || "" : "", bs: b ? b.s : "", be: b ? b.e || "" : "", nobrk: false, reason: "" };
+  render(); window.scrollTo(0, 0);
+}
+async function fixSend(){
+  const v = id => (document.getElementById(id) || {}).value || "";
+  const F = { ymd: v("fxYmd"), in: v("fxIn"), out: v("fxOut"), bs: v("fxBs"), be: v("fxBe"), reason: v("fxWhy").trim(), nobrk: (document.getElementById("fxNoBrk") || {}).checked };
+  if(F.nobrk){ F.bs = "-"; F.be = ""; }
+  if(!F.ymd){ toast("日付を入れてください"); return; }
+  if(!F.reason){ toast("理由を書いてください"); return; }
+  if(!F.nobrk && (!!F.bs !== !!F.be)){ toast("休憩は始めと終わりの両方を入れてください"); return; }
+  if(!F.in && !F.out && !F.bs){ toast("直す時刻を入れてください"); return; }
+  try{
+    const j = DEMO ? demoPunch("fix", null, null, { ymd: F.ymd, in: F.in, out: F.out, bs: F.bs, be: F.be, reason: F.reason })
+      : await rpc("lb_fix_request", { p_token: AUTH.token, p_ymd: F.ymd, p_in: F.in, p_out: F.out, p_bs: F.bs, p_be: F.be, p_reason: F.reason });
+    punchApply(j); PC.fix = null; render(); toast("申請しました。管理者が承認すると直ります");
+  }catch(e){ toast(punchErr(e)); }
+}
+
+/* ---------- 管理者：勤怠（修正の承認・一覧・手直し・打刻する人・店の位置） ---------- */
+const KT = { month: "", data: null, at: 0, err: "", edit: null, busy: false };
+function ktRange(){ const m = KT.month || bizDate().slice(0, 7), [y, mo] = m.split("-").map(Number), last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return [m + "-01", m + "-" + String(last).padStart(2, "0")]; }
+function ktDemo(){
+  const names = (staffNames().length ? staffNames() : REAL_NAMES).filter(n => ["岩崎"].indexOf(n) < 0).slice(0, 6), rows = [], t = bizDate();
+  for(let i = 1; i <= 6; i++){ const d = new Date(Date.now() + 9*3600e3 - i*864e5).toISOString().slice(0, 10);
+    names.slice(0, 3).forEach((n, k) => rows.push({ staff_id: "s" + k, name: n, ymd: d, in: ["09:58","10:30","12:00"][k], out: i === 2 && k === 2 ? null : ["17:02","18:31","19:45"][k], in_next: false,
+      breaks: k === 1 ? [{ s: "14:00", e: "14:45" }] : [], break_min: k === 1 ? 45 : 0, work_min: [424, 436, 465][k], in_near: !(i === 3 && k === 0), in_dist: i === 3 && k === 0 ? 820 : 30, out_near: k === 2 ? null : true, out_dist: 20, edited: i === 4 && k === 1, note: "", synced: i > 2, sync_note: "" }));
+    rows.forEach(r => { if(!r.out) r.work_min = null; }); }
+  return { rows, fixes: [{ id: "fx1", staff_id: "s2", name: names[2] || "田中", ymd: rows[0].ymd, in: "", out: "19:40", bs: "", be: "", reason: "退勤を押し忘れた", status: "pending", decided_by: "" }],
+    staff: names.map((n, k) => ({ id: "s" + k, name: n, punch_app: k < 3 })), store: null };
+}
+async function loadKT(){
+  KT.at = Date.now();
+  try{
+    if(DEMO || !LIVE){ KT.data = KT.data || ktDemo(); KT.err = ""; return; }
+    const [f, t] = ktRange();
+    KT.data = await rpc("lb_attend_admin", { p_token: AUTH.token, p_from: f, p_to: t > bizDate() ? bizDate() : t });
+    KT.err = "";
+  }catch(e){ KT.err = "勤怠を読み込めませんでした（" + e.message + "）"; }
+}
+async function ktCall(fn, args, okMsg){
+  if(KT.busy) return; KT.busy = true;
+  try{ if(!(DEMO || !LIVE)) await rpc(fn, Object.assign({ p_token: AUTH.token }, args)); await loadKT(); if(okMsg) toast(okMsg); }
+  catch(e){ toast(e.message); }
+  KT.busy = false; render();
+}
+function viewKAttend(){
+  const D = KT.data, mk = KT.month || bizDate().slice(0, 7);
+  const prev = (() => { const [y, m] = mk.split("-").map(Number); return m === 1 ? (y - 1) + "-12" : y + "-" + String(m - 1).padStart(2, "0"); })();
+  const next = (() => { const [y, m] = mk.split("-").map(Number); return m === 12 ? (y + 1) + "-01" : y + "-" + String(m + 1).padStart(2, "0"); })();
+  const head = '<div class="stack"><div class="row"><h1>勤怠</h1><button class="btn sm ghost" type="button" data-ktreload="1">読み直す</button></div>' +
+    '<p class="sub" style="margin:0">アプリで打刻した記録です。退勤まで済んだ日は、1日1回 freee の勤怠に書き込みます（並走中は freee 側で手で直さないでください）。</p>' +
+    (KT.err ? '<p class="err">' + esc(KT.err) + "</p>" : "");
+  if(!D) return head + '<p class="sub">読み込んでいます…</p></div>';
+  const pend = (D.fixes || []).filter(f => f.status === "pending");
+  const rowOf = (sid, ymd) => (D.rows || []).find(r => r.staff_id === sid && r.ymd === ymd);
+  const fixCard = pend.length ? '<section class="card warn"><div class="row"><h2>修正の申請</h2><span class="pill warn">' + pend.length + "件</span></div>" + pend.map(f => {
+      const r = rowOf(f.staff_id, f.ymd);
+      return '<div class="kfix"><p style="margin:0"><b>' + esc(f.name) + "</b>　" + esc(mdS(String(f.ymd).replace(/-/g, "/"))) + "</p>" +
+        '<p class="sub" style="margin:2px 0">いま：' + esc(r ? attendLine(r) : "記録なし") + "</p>" +
+        '<p style="margin:2px 0">申請：' + esc([f.in && "出勤 " + f.in, f.out && "退勤 " + f.out, f.bs === "-" ? "休憩なし" : f.bs && "休憩 " + f.bs + "〜" + f.be].filter(Boolean).join("・")) + "</p>" +
+        '<p class="sub" style="margin:2px 0 8px">理由：' + esc(f.reason) + "</p>" +
+        '<div class="row" style="gap:8px"><button class="btn sm ghost" type="button" data-ktfix="' + esc(f.id) + '|0">見送る</button><button class="btn sm" type="button" data-ktfix="' + esc(f.id) + '|1">承認する</button></div></div>';
+    }).join("") + "</section>" : "";
+  const rows = D.rows || [], warn = rows.filter(r => (r.in && !r.out && r.ymd < bizDate()) || r.in_near === false || r.out_near === false || r.sync_note);
+  const days = {}; rows.forEach(r => { (days[r.ymd] = days[r.ymd] || []).push(r); });
+  const E = KT.edit;
+  const editForm = r => '<form class="stack ktedit" style="gap:8px;margin-top:8px" data-ktsave="' + esc(r.staff_id + "|" + r.ymd) + '">' +
+    '<div class="row" style="gap:8px"><span style="flex:1"><label class="label">出勤</label><input type="time" name="in" value="' + esc(r.in || "") + '"></span><span style="flex:1"><label class="label">退勤</label><input type="time" name="out" value="' + esc(r.out || "") + '"></span></div>' +
+    '<div class="row" style="gap:8px"><span style="flex:1"><label class="label">休憩の始め</label><input type="time" name="bs" value="' + esc((r.breaks[0] || {}).s || "") + '"></span><span style="flex:1"><label class="label">休憩の終わり</label><input type="time" name="be" value="' + esc((r.breaks[0] || {}).e || "") + '"></span></div>' +
+    '<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" name="nobrk" style="width:20px;height:20px;min-height:0;margin:0"> 休憩なしにする</label>' +
+    '<input type="text" name="note" maxlength="100" placeholder="メモ（任意）">' +
+    '<div class="row" style="gap:8px"><button class="btn sm ghost" type="button" data-ktdel="' + esc(r.staff_id + "|" + r.ymd) + '">この日の記録を消す</button><span style="flex:1"></span><button class="btn sm ghost" type="button" data-ktcancel="1">やめる</button><button class="btn sm" type="submit">保存</button></div></form>';
+  const line = r => { const open = E && E.sid === r.staff_id && E.ymd === r.ymd;
+    return '<li><div class="body"><span style="font-variant-numeric:tabular-nums"><b>' + esc(r.name) + "</b>　" + esc(attendLine(r)) + "</span>" +
+      '<span class="sub">' + (r.work_min != null ? "実働 " + minHM(r.work_min) + " " : "") + attendFlags(r, true) + (r.note ? " " + esc(r.note) : "") + "</span>" + (open ? editForm(r) : "") + "</div>" +
+      (open ? "" : '<button class="btn sm ghost" type="button" data-ktedit="' + esc(r.staff_id + "|" + r.ymd) + '">直す</button>') + "</li>"; };
+  const warnCard = warn.length ? '<section class="card"><div class="row"><h2>確かめること</h2><span class="pill warn">' + warn.length + '件</span></div><ul class="lines">' + warn.map(line).join("") + "</ul></section>" : "";
+  const totalMin = rows.reduce((t, r) => t + (r.work_min || 0), 0), unsent = rows.filter(r => r.out && !r.synced).length;
+  const list = '<section class="card"><div class="row"><button class="btn sm ghost" type="button" data-ktm="' + prev + '">‹</button><h2>' + esc(+mk.slice(5) + "月") + '</h2><button class="btn sm ghost" type="button" data-ktm="' + next + '"' + (next > bizDate().slice(0, 7) ? " disabled" : "") + ">›</button></div>" +
+    '<p class="sub" style="margin:0 0 6px">' + rows.length + "件・実働 合計 " + minHM(totalMin) + (unsent ? "・freee 未送信 " + unsent + "件" : "") + "</p>" +
+    (Object.keys(days).length ? Object.keys(days).sort().reverse().map(d => '<p class="dayh" style="margin:10px 0 4px"><b>' + esc(mdS(d.replace(/-/g, "/"))) + "（" + WD[new Date(d + "T00:00:00Z").getUTCDay()] + '）</b></p><ul class="lines">' + days[d].map(line).join("") + "</ul>").join("") : '<p class="sub">この月の記録はまだありません。</p>') + "</section>";
+  const ppl = '<section class="card"><h2>アプリで打刻する人</h2><p class="sub" style="margin:0 0 8px">オンにした人は、ホームに打刻のボタンが出て、記録が freee に送られます。その人には freee のアプリで打刻しないよう伝えてください。</p><div class="dchips">' +
+    (D.staff || []).map(p => '<button type="button" class="dchip ' + (p.punch_app ? "received" : "none") + '" data-ktapp="' + esc(p.id) + '|' + (p.punch_app ? 0 : 1) + '"><b>' + (p.punch_app ? "オン" : "オフ") + "</b><span>" + esc(p.name) + "</span></button>").join("") + "</div></section>";
+  const st = D.store;
+  const loc = '<section class="card"><h2>店の位置</h2>' + (st ? '<p class="sub" style="margin:0 0 8px">決めてあります（半径 ' + st.r + "m" + (st.by ? "・" + esc(st.by) + "さん" : "") + "）。店から離れた打刻には印が付きます。</p>" : '<p class="sub" style="margin:0 0 8px">まだ決まっていません。店の中でこのボタンを押すと、いまの場所を店の位置にします。</p>') +
+    '<div class="row" style="gap:8px;flex-wrap:wrap"><select id="ktR" aria-label="半径" style="flex:0 0 auto;width:auto">' + [100, 150, 200, 300].map(n => '<option value="' + n + '"' + ((st ? st.r : 150) === n ? " selected" : "") + ">半径 " + n + "m</option>").join("") + '</select><button class="btn sm" type="button" data-ktloc="1" style="flex:1 1 auto">いまの場所を店の位置にする</button></div></section>';
+  return head + fixCard + warnCard + list + ppl + loc + "</div>";
 }
 
 /* ---------- gallery.klyuch と 東京都現代美術館（シフト連携の Apps Script から一緒に届く） ---------- */
@@ -2201,6 +2380,7 @@ function renderKanri(r){
   if(r === "build"){ html = viewBuild(); tab = "build"; }
   else if(r === "shift"){ html = viewShift(); tab = "shift"; }
   else if(r === "k-docs"){ html = viewKDocs(); tab = "k-docs"; if(!DC.at) loadDocs().then(render); }
+  else if(r === "k-attend"){ html = viewKAttend(); tab = "k-attend"; if(!KT.at) loadKT().then(render); }
   else { html = viewKToday(); tab = "k-today"; if(!KA.at) loadK().then(render); }
   $("#view").innerHTML = '<p class="kpill">管理者アプリ</p>' + html;
   kt.querySelectorAll("a").forEach(a => a.setAttribute("aria-current", a.dataset.tab === tab ? "page" : "false"));
@@ -2231,12 +2411,13 @@ function render(){
   else if(r === "shift"){ html = viewShift(); tab = "home"; }
   else if(r === "wish"){ if(VIEWER()){ location.hash = "#home"; return; } html = viewWish(); tab = "home"; }
   else if(r === "build"){ html = viewBuild(); tab = "home"; }
+  else if(r === "punch"){ html = viewPunchLog(); tab = "home"; }
   else if(r === "manual"){ html = viewManual(); tab = "manual"; }
   else if(r.startsWith("m-")){ html = viewManualItem(r.slice(2)); tab = "manual"; }
   else { html = viewHome(); tab = "home"; }
   if(S.error && tab !== "manual") html = '<p class="err">' + esc(S.error) + "。電波を確認して開き直してください。</p>" + html;
   const keep = document.activeElement && document.activeElement.id;
-  const vals = {}; ["shortIn","noteIn","taskIn","askIn"].forEach(k => { const el = document.getElementById(k); if(el) vals[k] = el.value; });
+  const vals = {}; ["shortIn","noteIn","taskIn","askIn","fxYmd","fxIn","fxOut","fxBs","fxBe","fxWhy"].forEach(k => { const el = document.getElementById(k); if(el) vals[k] = el.value; });
   const sgw = document.querySelector(".sgw"), sgx = sgw ? sgw.scrollLeft : 0;
   $("#view").innerHTML = html;
   if(sgx){ const n = document.querySelector(".sgw"); if(n) n.scrollLeft = sgx; }
@@ -2257,6 +2438,28 @@ $("#view").addEventListener("click", e => {
   const dcy = e.target.closest("[data-dccopy]"); if(dcy){ const [k, id] = dcy.dataset.dccopy.split("|"); const t = k === "p" ? dcPersonText(DC.staff.find(p => p.id === id)) : dcTypeText(DC.types.find(x => x.id === id)); if(t) copyText(t); return; }
   const dca = e.target.closest("[data-dcask]"); if(dca){ const pid = dca.dataset.dcask; (async () => { for(const t of DC.types) if(dcStatus(pid, t.id) === "none") await dcSet(pid, t.id, "asked"); render(); toast("まだの分を「頼んだ」にしました"); })(); return; }
   const pb = e.target.closest(".punch"); if(pb){ doPunch(pb.dataset.a); return; }
+  const fxb = e.target.closest("[data-fx]"); if(fxb){ fixOpen(fxb.dataset.fx, !!fxb.dataset.fxnew); return; }
+  if(e.target.closest("[data-fxcancel]")){ PC.fix = null; render(); return; }
+  if(e.target.closest("[data-ktreload]")){ loadKT().then(render); return; }
+  const ktm = e.target.closest("[data-ktm]"); if(ktm){ KT.month = ktm.dataset.ktm; KT.data = DEMO || !LIVE ? KT.data : null; KT.edit = null; render(); loadKT().then(render); return; }
+  const ktf = e.target.closest("[data-ktfix]"); if(ktf){ const [id, ok] = ktf.dataset.ktfix.split("|");
+    if(DEMO || !LIVE){ const f = KT.data.fixes.find(x => x.id === id); if(f){ f.status = ok === "1" ? "approved" : "rejected"; if(ok === "1"){ const r = KT.data.rows.find(x => x.staff_id === f.staff_id && x.ymd === f.ymd); if(r){ if(f.out) r.out = f.out; if(f.in) r.in = f.in; r.edited = true; r.synced = false; } } } render(); toast(ok === "1" ? "承認しました" : "見送りました"); return; }
+    ktCall("lb_fix_decide", { p_id: id, p_ok: ok === "1" }, ok === "1" ? "承認しました。次の書き込みで freee も直ります" : "見送りました"); return; }
+  const kte = e.target.closest("[data-ktedit]"); if(kte){ const [sid, ymd] = kte.dataset.ktedit.split("|"); KT.edit = { sid, ymd }; render(); return; }
+  if(e.target.closest("[data-ktcancel]")){ KT.edit = null; render(); return; }
+  const ktd = e.target.closest("[data-ktdel]"); if(ktd){ const [sid, ymd] = ktd.dataset.ktdel.split("|"); if(!confirm("この日の記録をアプリから消しますか？（freee 側は消えません。freee で直してください）")) return;
+    KT.edit = null; if(DEMO || !LIVE){ KT.data.rows = KT.data.rows.filter(r => !(r.staff_id === sid && r.ymd === ymd)); render(); return; }
+    ktCall("lb_attend_put", { p_staff: sid, p_ymd: ymd, p_in: "x", p_out: "", p_bs: "", p_be: "", p_note: "" }, "消しました"); return; }
+  const kta = e.target.closest("[data-ktapp]"); if(kta){ const [sid, on] = kta.dataset.ktapp.split("|");
+    if(DEMO || !LIVE){ const p = KT.data.staff.find(x => x.id === sid); if(p) p.punch_app = on === "1"; render(); return; }
+    ktCall("lb_punch_app_set", { p_staff: sid, p_on: on === "1" }, on === "1" ? "オンにしました" : "オフにしました"); return; }
+  if(e.target.closest("[data-ktloc]")){ if(!confirm("いまの場所を店の位置にします。店の中にいますか？")) return; (async () => {
+    toast("位置を確かめています…"); const p = await getPos(15000);
+    if(!p){ toast("位置が取れませんでした。位置情報の許可を確かめてください"); return; }
+    if(p.acc > 100){ toast("位置の精度が低い（約" + Math.round(p.acc) + "m）ので、窓の近くでもう一度押してください"); return; }
+    const r = +((document.getElementById("ktR") || {}).value || 150);
+    if(DEMO || !LIVE){ KT.data.store = { lat: p.lat, lng: p.lng, r, by: me() }; render(); toast("店の位置を決めました（見本）"); return; }
+    ktCall("lb_store_loc_set", { p_lat: p.lat, p_lng: p.lng, p_r: r }, "店の位置を決めました"); })(); return; }
   const wm = e.target.closest("[data-wm]"); if(wm){ if(W.dirty && !confirm("まだ送っていない変更があります。別の月に移りますか？")) return; W.month = wm.dataset.wm; W.loaded = ""; render(); return; }
   const wmo = e.target.closest("[data-wmode]"); if(wmo){ W.mode = wmo.dataset.wmode; render(); return; }
   const wdy = e.target.closest("[data-wday]"); if(wdy){ wishTap(wdy.dataset.wday); return; }
@@ -2311,6 +2514,13 @@ $("#view").addEventListener("submit", async e => {
   if(e.target.id === "rtForm"){ rtSubmit(e.target); return; }
   if(e.target.id === "taskForm"){ const v = $("#taskIn").value.trim(); if(!v) return $("#taskIn").focus(); if(await addNote("task", v)) $("#taskIn").value = ""; }
   if(e.target.id === "buyForm"){ await sendBuy(); return; }
+  if(e.target.id === "fixForm"){ e.preventDefault(); fixSend(); return; }
+  if(e.target.classList && e.target.classList.contains("ktedit")){ e.preventDefault(); const f = e.target, [sid, ymd] = f.dataset.ktsave.split("|"), g = n => (f.elements[n] || {}).value || "";
+    const nob = f.elements.nobrk && f.elements.nobrk.checked, bs = nob ? "-" : g("bs"), be = nob ? "" : g("be");
+    if(!nob && (!!bs !== !!be)){ toast("休憩は始めと終わりの両方を入れてください"); return; }
+    KT.edit = null;
+    if(DEMO || !LIVE){ const r = KT.data.rows.find(x => x.staff_id === sid && x.ymd === ymd); if(r){ r.in = g("in") || r.in; r.out = g("out") || r.out; if(nob) r.breaks = []; else if(bs) r.breaks = [{ s: bs, e: be }]; r.edited = true; r.synced = false; } render(); toast("直しました（見本）"); return; }
+    ktCall("lb_attend_put", { p_staff: sid, p_ymd: ymd, p_in: g("in"), p_out: g("out"), p_bs: bs, p_be: be, p_note: g("note") }, "直しました。次の書き込みで freee も直ります"); return; }
   if(e.target.id === "dcAdd"){ const n = $("#dcName").value.trim(), no = $("#dcNote").value.trim(); if(!n) return;
     try{ if(DEMO || !LIVE){ DC.types.push({ id: "t" + Date.now(), name: n, note: no, sort: 999 }); mem.set("docsDemo", { types: DC.types, staff: DC.staff, st: DC.st }); }
       else { await rpc("lb_doc_type_put", { p_token: AUTH.token, p_id: null, p_name: n, p_note: no, p_sort: 900, p_active: true }); await loadDocs(); }
@@ -2339,7 +2549,7 @@ if(DEMO){
   loadShifts(true).then(render);
   loadPunch(true).then(render);
 }
-setInterval(() => { if(!document.hidden){ loadShifts().then(render); loadPunch().then(render); } }, 60000);
+setInterval(() => { if(!document.hidden && !document.querySelector("#fixForm,.ktedit")){ loadShifts().then(render); loadPunch().then(render); } }, 60000);
 loadPickups(true).then(render);
 loadLeaders(true).then(render);
 if(!KANRI){ loadMyDocs().then(render); setInterval(() => { if(!document.hidden) loadMyDocs().then(render); }, 60000); }
