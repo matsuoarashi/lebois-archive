@@ -17,6 +17,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="le bois">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script>/* 管理者アプリ（?app=kanri）はホーム画面のアイコンと名前を分ける（オリオンと同じ作り） */
+(function(){ if(!/[?&]app=kanri\b/.test(location.search)) return;
+  var q = function(s){ return document.querySelector(s); };
+  q('link[rel="manifest"]').setAttribute("href", "manifest-kanri.webmanifest");
+  q('link[rel="apple-touch-icon"]').setAttribute("href", "icon-kanri-180.png");
+  q('meta[name="apple-mobile-web-app-title"]').setAttribute("content", "le bois 管理");
+  document.title = "le bois 管理"; })();</script>
 <!--APP-->
 <title>le bois スタッフ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -325,6 +332,13 @@ h1{font-size:18px;font-weight:700;margin:2px 0}
 .nowrow b{font-variant-numeric:tabular-nums;font-size:14px}
 .card.now{border:2px solid var(--moss)}
 .chk[aria-checked="true"] .cd{display:none}
+.kpill{display:inline-block;margin:0 0 8px;background:var(--moss);color:var(--btn-ink,#fff);font-size:12px;font-weight:700;letter-spacing:.12em;border-radius:999px;padding:3px 10px}
+.kbig{font-size:30px;font-weight:800;margin:2px 0 4px;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.kbars{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;height:88px;margin-top:12px}
+.kb{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:3px}
+.kb i{display:block;width:100%;background:var(--moss-soft);border:1.5px solid var(--moss);border-radius:4px 4px 2px 2px}
+.kb.we i{background:var(--moss)}
+.kb span{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 .bchk{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-top:1px solid var(--line-soft);cursor:pointer;font-size:15px;line-height:1.45}
 .bchk:first-child{border-top:0}
 .chk .cd{display:block;font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:2px;font-weight:400}
@@ -417,12 +431,18 @@ input[type=number]{-moz-appearance:textfield}
   <main id="view"></main>
 </div>
 
-<div class="tabs"><nav aria-label="メイン">
+<div class="tabs stabs"><nav aria-label="メイン">
   <a href="#home" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>ホーム</a>
   <a href="#check-open" data-tab="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 9l2 2 4-4M8 16h8"/></svg>チェック</a>
   <a href="#notes" data-tab="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>引き継ぎ<span class="badge" id="badge" hidden></span></a>
   <a href="#ask" data-tab="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></svg>聞く</a>
   <a href="#manual" data-tab="manual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4z"/><path d="M5 16a4 4 0 0 1 4-4h10"/></svg>マニュアル</a>
+</nav></div>
+<div class="tabs ktabs" hidden><nav aria-label="管理">
+  <a href="#k-today" data-tab="k-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>今日</a>
+  <a href="#build" data-tab="build"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>シフト作成</a>
+  <a href="#shift" data-tab="shift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h13"/></svg>2週間</a>
+  <a href="./" data-tab="staff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>スタッフ画面</a>
 </nav></div>
 
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheet-h">
@@ -1990,16 +2010,110 @@ function nippoClick(e){
   return false;
 }
 
+/* ================= 管理者アプリ（?app=kanri・2026-11-06）=================
+ * オリオンと同じく、スタッフと同じ名前＋番号で入り、管理者（manager）だけが使える。
+ * 時給・人件費の明細はオーナー（lb_staff.owner）だけ。ル・ボアでは店長に見せない（松尾さん 11/6）。 */
+const KANRI = /[?&]app=kanri\b/.test(location.search);
+const KA = { dash: null, today: null, err: "", at: 0, loading: false, owner: false };
+(function(){ const c = mem.get("kdash", null); if(c){ KA.dash = c.dash; KA.today = c.today; } })();
+async function loadK(force){
+  if(KA.loading) return;
+  if(!force && KA.at && Date.now() - KA.at < 5 * 60e3) return;
+  KA.loading = true; KA.at = Date.now();
+  try{
+    if(DEMO || !LIVE){ KA.dash = kDemo(); KA.today = { sales: 18400, cash: 3200, tx: 14 }; KA.owner = true; KA.err = ""; }
+    else{
+      if(!AUTH.token || !CFG.nippoUrl){ KA.at = 0; return; }
+      try{ const me0 = ((await rpc("lb_me_info", { p_token: AUTH.token })) || [])[0]; KA.owner = !!(me0 && me0.owner); }catch(e){}
+      const r = await fetch(CFG.nippoUrl, { method: "POST", body: JSON.stringify({ token: AUTH.token, action: "dash" }) });
+      const j = await r.json();
+      if(!j.ok) throw new Error(j.error === "manager_only" ? "管理者だけが見られます" : (j.message || "読み込めませんでした"));
+      KA.dash = j.dash; KA.today = j.today; KA.err = ""; mem.set("kdash", { dash: KA.dash, today: KA.today });
+    }
+  }catch(e){ KA.err = "売上と日報の数字を読み込めませんでした（" + e.message + "）"; }
+  finally{ KA.loading = false; }
+}
+function kDemo(){
+  const days = [], base = jstNow();
+  for(let i = 40; i >= 1; i--){
+    const d = new Date(base.getTime() - i * 864e5), w = d.getUTCDay(); if(w === 1) continue;
+    const we = w === 0 || w === 6, s = Math.round((we ? 52000 : 20000) * (0.8 + ((i * 37) % 40) / 100));
+    days.push({ key: ymdS(d).replace(/\//g, "-"), label: (d.getUTCMonth() + 1) + "/" + d.getUTCDate(), wd: WD[w], sales: s, tx: Math.round(s / 1500), diff: i === 3 ? -1200 : 0, open: true, waste: i % 6 === 0 ? 3 : 0 });
+  }
+  const dow = WD.map(w => ({ wd: w, avgSales: w === "月" ? null : (w === "土" || w === "日" ? 52000 : 20000) }));
+  return { days, dow, flags: [{ date: days[days.length - 3].label, wd: days[days.length - 3].wd, kind: "delivery", text: "ガトーショコラ が -9切れ（ちょうど1本ぶん）。納品数の食い違いの疑い" }],
+    products: [{ name: "チーズケーキ", unit: "切れ", total: 29, perDay: 7.1, waste: 4 }, { name: "ガトーショコラ", unit: "切れ", total: 27, perDay: 2.6, waste: 15 }, { name: "シフォンケーキ", unit: "個", total: 7, perDay: 3.2, waste: 6 }, { name: "クロックムッシュ", unit: "食", total: 14, perDay: 2.8, waste: 4 }],
+    plan: { deadline: "11/12", overdue: false, decide: [{ label: "11/18", wd: "水", blank: true }, { label: "11/21", wd: "土", blank: true }],
+      lines: [{ name: "チーズケーキ", bundle: "本", unit: "切れ", runout: "11/15", deliveries: [{ date: "11/18", qty: 2, current: 0 }, { date: "11/21", qty: 5, current: 0 }] }, { name: "シフォンケーキ", bundle: "ロール", unit: "個", runout: "11/11", deliveries: [{ date: "11/18", qty: 2, current: 0 }, { date: "11/21", qty: 2, current: 0 }] }] } };
+}
+const kYen = n => (Math.round(Number(n) || 0)).toLocaleString("ja-JP") + "円";
+function viewKToday(){
+  const now = jstNow(), todayKey = ymdS(now).replace(/\//g, "-"), wd = WD[now.getUTCDay()];
+  const d = KA.dash, t = KA.today || {};
+  const days = d ? (d.days || []).filter(x => x.open && x.key !== todayKey) : [];
+  const avgW = d ? ((d.dow || []).find(x => x.wd === wd) || {}).avgSales : null;
+  const ym = todayKey.slice(0, 7), lastYm = (function(){ const x = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)); return x.toISOString().slice(0, 7); })();
+  const dom = now.getUTCDate();
+  const monthSum = days.filter(x => x.key.slice(0, 7) === ym).reduce((a, x) => a + x.sales, 0) + (Number(t.sales) || 0);
+  const lastSame = days.filter(x => x.key.slice(0, 7) === lastYm && Number(x.key.slice(8, 10)) <= dom).reduce((a, x) => a + x.sales, 0);
+  const lastHas = days.some(x => x.key.slice(0, 7) === lastYm && Number(x.key.slice(8, 10)) <= 3);  // 先月の初めから記録があるときだけ比べる
+  const recent = days.slice(-14), mx = Math.max(1, ...recent.map(x => x.sales));
+  const bars = recent.length ? '<div class="kbars">' + recent.map(x => '<div class="kb' + (x.wd === "土" || x.wd === "日" ? " we" : "") + '" title="' + esc(x.label + " " + kYen(x.sales)) + '"><i style="height:' + Math.max(3, x.sales / mx * 100) + '%"></i><span>' + esc(x.label.split("/")[1]) + "</span></div>").join("") + "</div>" : "";
+  const diffDays = days.slice(-14).filter(x => Math.abs(x.diff) >= 1000);
+  const flags = d ? (d.flags || []).slice(0, 4) : [];
+  const shorts = S.notes.filter(n => n.kind === "short" && !n.resolved_at);
+  const todayShift = SH.days.find(x => x.date === ymdS(now));
+  const gapDays = SH.days.filter(x => x.items.some(i => i.vacant));
+  const plan = d && d.plan;
+  const cards = [];
+  cards.push('<section class="card"><div class="row"><h2>今日の売上</h2><span class="pill mute">Square</span></div>' +
+    '<p class="kbig">' + kYen(t.sales) + '</p><p class="sub" style="margin:0">' + (t.tx ? t.tx + "件・" : "") + "現金 " + kYen(t.cash) + (avgW ? "　" + wd + "曜のいつも " + kYen(Math.round(avgW / 100) * 100) : "") + "</p></section>");
+  cards.push('<section class="card"><div class="row"><h2>今月の売上</h2><span class="pill mute">' + esc(String(now.getUTCMonth() + 1)) + "月" + dom + "日まで</span></div>" +
+    '<p class="kbig">' + kYen(monthSum) + '</p>' + (lastSame && lastHas ? '<p class="sub" style="margin:0">先月の同じ日まで ' + kYen(lastSame) + "（" + (monthSum >= lastSame ? "+" : "") + Math.round((monthSum / lastSame - 1) * 100) + "%）</p>" : "") + bars + "</section>");
+  cards.push('<section class="card"><div class="row"><h2>今日の出勤</h2><a class="btn sm ghost" href="#shift">2週間</a></div>' +
+    (todayShift ? shiftBars(todayShift.items, true, todayShift.date) : '<p class="sub">今日のシフトは入っていません。</p>') +
+    (gapDays.length ? '<p style="margin:8px 0 0"><span class="pill warn">人が足りない日 ' + gapDays.length + "日</span> " + gapDays.slice(0, 4).map(x => esc(dayLabel(x.date))).join("・") + "</p>" : "") + "</section>");
+  const chk = [];
+  diffDays.forEach(x => chk.push(esc(x.label + "（" + x.wd + "）") + " レジの差 " + (x.diff > 0 ? "+" : "") + kYen(x.diff)));
+  flags.forEach(f => chk.push(esc(f.date + "（" + f.wd + "）") + " " + esc(f.text)));
+  if(shorts.length) chk.push("足りないもの " + shorts.length + "件：" + shorts.slice(0, 3).map(n => esc(n.body)).join("・"));
+  cards.push('<section class="card"><div class="row"><h2>確認が必要なこと</h2></div>' + (chk.length ? '<ul class="lines">' + chk.map(x => "<li><div class=\"body\"><span>" + x + "</span></div></li>").join("") + "</ul>" : '<p class="sub" style="margin:0">いまはありません。</p>') + "</section>");
+  if(plan) cards.push('<section class="card"><div class="row"><h2>momoの発注</h2><span class="pill' + (plan.overdue ? " warn" : " mute") + '">締め ' + esc(plan.deadline || "—") + (plan.overdue ? "（過ぎています）" : "") + "</span></div>" +
+    '<ul class="lines">' + plan.lines.map(l => "<li><div class=\"body\"><span><b>" + esc(l.name) + "</b>　" +
+      l.deliveries.map((q, j) => esc(q.date) + " " + (plan.decide[j] && plan.decide[j].blank ? "提案" + q.qty : q.current + "（入力済み）") + esc(l.bundle || l.unit)).join("・") +
+      '</span><span class="sub">' + (l.runout ? esc(l.runout) + "ごろ切れる見込み" : "4週間以上もつ") + "</span></div></li>").join("") + "</ul>" +
+    '<p class="sub" style="margin:0">数は製造予定表の「製造品目」に入れます。詳しくは「momo見通し」シート。</p></section>');
+  if(KA.owner) cards.push('<section class="card"><div class="row"><h2>人件費</h2><span class="pill mute">オーナーだけ</span></div><p class="sub" style="margin:0">勤怠をアプリに移すときに、ここへ人件費率と明細を出します。いまは「le bois 勤怠実績（管理者用）」の表で見られます。</p></section>');
+  return '<div class="stack"><div class="row"><h1>今日</h1><button class="btn sm ghost" type="button" data-kreload="1">読み直す</button></div>' +
+    (KA.err ? '<p class="err">' + esc(KA.err) + "</p>" : "") + (!d && KA.loading ? '<p class="sub">読み込んでいます…</p>' : "") + cards.join("") + "</div>";
+}
+function renderKanri(r){
+  document.querySelector(".stabs").hidden = true;
+  const kt = document.querySelector(".ktabs");
+  if(LIVE && AUTH.role !== "manager"){
+    kt.hidden = true;
+    $("#view").innerHTML = '<div class="stack"><p class="kpill">管理者アプリ</p><section class="card"><h2>管理者だけが使えます</h2><p class="sub">' + esc(me() || "") + ' さんはスタッフ画面を使ってください。</p><a class="btn full" href="./">スタッフ画面を開く</a></section></div>';
+    return;
+  }
+  kt.hidden = false;
+  let html, tab;
+  if(r === "build"){ html = viewBuild(); tab = "build"; }
+  else if(r === "shift"){ html = viewShift(); tab = "shift"; }
+  else { html = viewKToday(); tab = "k-today"; if(!KA.at) loadK().then(render); }
+  $("#view").innerHTML = '<p class="kpill">管理者アプリ</p>' + html;
+  kt.querySelectorAll("a").forEach(a => a.setAttribute("aria-current", a.dataset.tab === tab ? "page" : "false"));
+}
 function render(){
   const r = route();
   if($("#today")) $("#today").textContent = (function(){ const d = jstNow(); return (d.getUTCMonth()+1) + "月" + d.getUTCDate() + "日（" + WD[d.getUTCDay()] + "）"; })();
   let html, tab;
   if(LIVE && !AUTH.token){
-    $("#view").innerHTML = viewLogin();
-    document.querySelector(".tabs").hidden = true; $("#who").hidden = true;
+    $("#view").innerHTML = (KANRI ? '<p class="kpill">管理者アプリ</p>' : "") + viewLogin();
+    document.querySelectorAll(".tabs").forEach(t => { t.hidden = true; }); $("#who").hidden = true;
     return;
   }
-  document.querySelector(".tabs").hidden = false;
+  if(KANRI){ renderKanri(r); return; }
+  document.querySelector(".stabs").hidden = false;
   document.querySelectorAll('.tabs a[data-tab="check"],.tabs a[data-tab="notes"]').forEach(a => { a.hidden = VIEWER(); });
   if(VIEWER() && (r.startsWith("check-") || r === "notes" || r === "nippo")){ location.hash = "#home"; return; }
   /* 日報は入力中に描き直すと消えるので、開いている間は中を触らない */
@@ -2026,7 +2140,7 @@ function render(){
   if(sgx){ const n = document.querySelector(".sgw"); if(n) n.scrollLeft = sgx; }
   Object.keys(vals).forEach(k => { const el = document.getElementById(k); if(el) el.value = vals[k]; });
   if(keep && document.getElementById(keep) && /In$/.test(keep)) document.getElementById(keep).focus();
-  document.querySelectorAll(".tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.tab === tab ? "page" : "false"));
+  document.querySelectorAll(".stabs a").forEach(a => a.setAttribute("aria-current", a.dataset.tab === tab ? "page" : "false"));
   const ck = document.querySelector('.tabs a[data-tab="check"]'); ck.setAttribute("href", "#check-" + mem.get("lastList", "open"));
   const nShort = S.notes.filter(n => n.kind === "short" && !n.resolved_at).length;
   $("#badge").hidden = !nShort; $("#badge").textContent = nShort;
@@ -2034,6 +2148,7 @@ function render(){
 
 $("#view").addEventListener("click", e => {
   if(nippoClick(e)) return;
+  if(e.target.closest("[data-kreload]")){ loadK(true).then(render); render(); return; }
   const pb = e.target.closest(".punch"); if(pb){ doPunch(pb.dataset.a); return; }
   const wm = e.target.closest("[data-wm]"); if(wm){ if(W.dirty && !confirm("まだ送っていない変更があります。別の月に移りますか？")) return; W.month = wm.dataset.wm; W.loaded = ""; render(); return; }
   const wmo = e.target.closest("[data-wmode]"); if(wmo){ W.mode = wmo.dataset.wmode; render(); return; }
@@ -2116,6 +2231,7 @@ if(DEMO){
 setInterval(() => { if(!document.hidden){ loadShifts().then(render); loadPunch().then(render); } }, 60000);
 loadPickups(true).then(render);
 loadLeaders(true).then(render);
+if(KANRI) setInterval(() => { if(!document.hidden) loadK().then(render); }, 60000);
 setInterval(() => { if(!document.hidden) loadLeaders().then(render); }, 60000);
 /* 開くたびに名前と役割を確かめ直す（表示名や役割を変えたとき、入り直さなくても反映されるように） */
 (async () => {
