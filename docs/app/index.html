@@ -332,6 +332,13 @@ h1{font-size:18px;font-weight:700;margin:2px 0}
 .nowrow b{font-variant-numeric:tabular-nums;font-size:14px}
 .card.now{border:2px solid var(--moss)}
 .chk[aria-checked="true"] .cd{display:none}
+.dchips{display:flex;flex-wrap:wrap;gap:6px}
+.dchip{display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:2px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 9px;text-align:left;font-size:12.5px;line-height:1.35;max-width:100%;color:var(--ink)}
+.dchip b{font-size:11px;letter-spacing:.06em}
+.dchip.asked{border-color:var(--hand);background:var(--hand-soft)}.dchip.asked b{color:var(--hand)}
+.dchip.received{border-color:var(--moss);background:var(--moss-soft)}.dchip.received b{color:var(--moss)}
+.dchip.na{opacity:.5;border-style:dashed}
+.dchip.none b{color:var(--muted)}
 .kpill{display:inline-block;margin:0 0 8px;background:var(--moss);color:var(--btn-ink,#fff);font-size:12px;font-weight:700;letter-spacing:.12em;border-radius:999px;padding:3px 10px}
 .kbig{font-size:30px;font-weight:800;margin:2px 0 4px;font-variant-numeric:tabular-nums;letter-spacing:.01em}
 .kbars{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;height:88px;margin-top:12px}
@@ -442,6 +449,7 @@ input[type=number]{-moz-appearance:textfield}
   <a href="#k-today" data-tab="k-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>今日</a>
   <a href="#build" data-tab="build"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>シフト作成</a>
   <a href="#shift" data-tab="shift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h13"/></svg>2週間</a>
+  <a href="#k-docs" data-tab="k-docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13l2 2 4-4"/></svg>書類</a>
   <a href="./" data-tab="staff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>スタッフ画面</a>
 </nav></div>
 
@@ -1637,7 +1645,7 @@ function viewHome(){
       (phase === "close" ? "" : '<div><h3 class="label" style="margin:0 0 4px">明日の分の解凍</h3>' + thawLine + "</div>") +
       '<div><h3 class="label" style="margin:0 0 4px">提供期限</h3><table><tbody>' + C.expiry.map(e => '<tr><td>' + esc(e.item) + '</td><td class="n" style="white-space:normal;text-align:right">' + esc(e.rule) + "</td></tr>").join("") + '</tbody></table><p class="sub">' + esc(C.expiryNote) + "</p></div>" +
       viewAround() + "</div></details>";
-  return '<div class="stack">' + viewPunch() + viewRequests(true) + now1 + viewMyShift() + viewShiftCard() + (pickSoon ? viewPickupCard() : "") + notesCard + wish + tables + "</div>";
+  return '<div class="stack">' + viewPunch() + viewRequests(true) + now1 + viewMyShift() + viewShiftCard() + (pickSoon ? viewPickupCard() : "") + notesCard + viewMyDocs() + wish + tables + "</div>";
 }
 
 function viewCheck(list){
@@ -2087,6 +2095,99 @@ function viewKToday(){
   return '<div class="stack"><div class="row"><h1>今日</h1><button class="btn sm ghost" type="button" data-kreload="1">読み直す</button></div>' +
     (KA.err ? '<p class="err">' + esc(KA.err) + "</p>" : "") + (!d && KA.loading ? '<p class="sub">読み込んでいます…</p>' : "") + cards.join("") + "</div>";
 }
+/* ---- 書類の受け取り状況（2026-11-06）。中身は持たず、状態だけ。依頼のLINE文面を作る ---- */
+const DC = { types: [], staff: [], st: {}, at: 0, err: "", by: mem.get("dcBy", "person"), due: mem.get("dcDue", ""), where: mem.get("dcWhere", ""), open: "" };
+const DC_LABEL = { none: "まだ", asked: "頼んだ", received: "受取済", na: "不要" };
+const DC_NEXT = { none: "asked", asked: "received", received: "na", na: "none" };
+async function loadDocs(){
+  DC.at = Date.now();
+  try{
+    let rows;
+    if(DEMO || !LIVE){
+      const m = mem.get("docsDemo", null);
+      if(m){ Object.assign(DC, { types: m.types, staff: m.staff, st: m.st }); DC.err = ""; return; }
+      const names = (staffNames().length ? staffNames() : REAL_NAMES.concat(["古川", "松尾"])).filter(n => n !== "岩崎");
+      DC.types = ["雇用契約書（労働条件通知書）の控え","扶養控除等申告書（2027年分）","基礎控除・配偶者控除等の申告書（2026年分）","保険料控除申告書（2026年分）","通勤経路と交通費の申請","給与の振込口座の届け","マイナンバーの提出"].map((n, i) => ({ id: "t" + i, name: n, note: "", sort: i }));
+      DC.staff = names.map((n, i) => ({ id: "s" + i, name: n })); DC.st = {};
+      DC.staff.forEach((p, i) => { DC.st[p.id + "|t0"] = { status: "received" }; if(i % 3 === 0) DC.st[p.id + "|t1"] = { status: "asked", asked_at: new Date().toISOString() }; });
+      mem.set("docsDemo", { types: DC.types, staff: DC.staff, st: DC.st }); DC.err = ""; return;
+    }
+    rows = await rpc("lb_docs_admin", { p_token: AUTH.token }) || [];
+    DC.types = rows.filter(r => r.kind === "type").sort((a, b) => a.sort - b.sort);
+    DC.staff = rows.filter(r => r.kind === "staff").sort((a, b) => a.sort - b.sort);
+    DC.st = {}; rows.filter(r => r.kind === "status").forEach(r => { DC.st[r.staff_id + "|" + r.id] = r; });
+    DC.err = "";
+  }catch(e){ DC.err = "書類の状況を読み込めませんでした（" + e.message + "）"; }
+}
+function dcStatus(pid, tid){ return (DC.st[pid + "|" + tid] || {}).status || "none"; }
+async function dcSet(pid, tid, status){
+  try{
+    if(DEMO || !LIVE){ DC.st[pid + "|" + tid] = { status, asked_at: status === "asked" ? new Date().toISOString() : null }; mem.set("docsDemo", { types: DC.types, staff: DC.staff, st: DC.st }); }
+    else { await rpc("lb_doc_set", { p_token: AUTH.token, p_staff: pid, p_type: tid, p_status: status }); DC.st[pid + "|" + tid] = Object.assign({}, DC.st[pid + "|" + tid], { status }); }
+  }catch(e){ toast(e.message); }
+}
+function dcDueText(){ if(!DC.due) return ""; const d = new Date(DC.due + "T00:00:00"); return (d.getMonth() + 1) + "/" + d.getDate() + "（" + WD[d.getDay()] + "）"; }
+function dcPersonText(p){
+  const want = DC.types.filter(t => ["none", "asked"].indexOf(dcStatus(p.id, t.id)) >= 0);
+  if(!want.length) return "";
+  return p.name + " さん\nお疲れさまです。" + (me() || "") + "です。\n次の書類の提出をお願いします。\n" +
+    want.map(t => "・" + t.name + (t.note ? "（" + t.note + "）" : "")).join("\n") +
+    (DC.due ? "\n期限：" + dcDueText() + "まで" : "") + (DC.where ? "\n提出先：" + DC.where : "") +
+    "\nわからないことがあれば、いつでも聞いてください。よろしくお願いします。";
+}
+function dcTypeText(t){
+  const yet = DC.staff.filter(p => ["none", "asked"].indexOf(dcStatus(p.id, t.id)) >= 0);
+  if(!yet.length) return "";
+  return "【書類のお願い】" + t.name + (t.note ? "\n" + t.note : "") + "\nまだの方：" + yet.map(p => p.name + "さん").join("、") +
+    (DC.due ? "\n期限：" + dcDueText() + "まで" : "") + (DC.where ? "\n提出先：" + DC.where : "") + "\nよろしくお願いします。";
+}
+function viewKDocs(){
+  const chip = (p, t) => { const st = dcStatus(p.id, t.id); return '<button type="button" class="dchip ' + st + '" data-dc="' + esc(p.id + "|" + t.id) + '" title="押すと切り替わります"><b>' + esc(DC_LABEL[st]) + "</b><span>" + esc(t.name) + "</span></button>"; };
+  const head = '<div class="stack"><div class="row"><h1>書類</h1><button class="btn sm ghost" type="button" data-dcreload="1">読み直す</button></div>' +
+    '<p class="sub" style="margin:0">受け取ったかどうかだけを記録します。番号や口座の中身はアプリに入れません。札を押すと「まだ → 頼んだ → 受取済 → 不要」と切り替わります。</p>' +
+    (DC.err ? '<p class="err">' + esc(DC.err) + "</p>" : "") +
+    '<section class="card"><div class="row" style="gap:8px;flex-wrap:wrap"><label class="label" for="dcDue" style="margin:0">期限</label><input type="date" id="dcDue" value="' + esc(DC.due) + '" style="flex:1;min-width:140px">' +
+    '</div><label class="label" for="dcWhere">提出先（LINEの文に入ります）</label><input type="text" id="dcWhere" maxlength="60" value="' + esc(DC.where) + '" placeholder="例：レジ下の書類ボックス／松尾に手渡し"></section>' +
+    '<div class="seg" role="tablist"><button type="button" data-dcby="person" class="' + (DC.by === "person" ? "on" : "") + '">人ごと</button><button type="button" data-dcby="type" class="' + (DC.by === "type" ? "on" : "") + '">書類ごと</button></div>';
+  if(!DC.types.length) return head + '<p class="sub">' + (DC.at ? "書類の種類がまだありません。" : "読み込んでいます…") + "</p></div>";
+  let body = "";
+  if(DC.by === "person"){
+    body = DC.staff.map(p => {
+      const got = DC.types.filter(t => dcStatus(p.id, t.id) === "received").length, need = DC.types.filter(t => dcStatus(p.id, t.id) !== "na").length;
+      const txt = dcPersonText(p);
+      return '<section class="card"><div class="row"><h2>' + esc(p.name) + '</h2><span class="pill' + (got >= need ? "" : " mute") + '">受取 ' + got + " / " + need + "</span></div>" +
+        '<div class="dchips">' + DC.types.map(t => chip(p, t)).join("") + "</div>" +
+        (txt ? '<div class="row" style="margin-top:10px;gap:8px"><button class="btn sm" type="button" data-dccopy="p|' + esc(p.id) + '">LINEの文をコピー</button><button class="btn sm ghost" type="button" data-dcask="' + esc(p.id) + '">まだの分を「頼んだ」に</button></div>' : "") + "</section>";
+    }).join("");
+  } else {
+    body = DC.types.map(t => {
+      const yet = DC.staff.filter(p => ["none", "asked"].indexOf(dcStatus(p.id, t.id)) >= 0), got = DC.staff.filter(p => dcStatus(p.id, t.id) === "received").length;
+      return '<section class="card"><div class="row"><h2 style="font-size:15px">' + esc(t.name) + '</h2><span class="pill' + (yet.length ? " mute" : "") + '">受取 ' + got + "人</span></div>" + (t.note ? '<p class="sub" style="margin:0 0 6px">' + esc(t.note) + "</p>" : "") +
+        '<div class="dchips">' + DC.staff.map(p => chip(p, t).replace("<span>" + esc(t.name) + "</span>", "<span>" + esc(p.name) + "</span>")).join("") + "</div>" +
+        (yet.length ? '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-dccopy="t|' + esc(t.id) + '">全体向けのLINEの文をコピー</button></div>' : "") + "</section>";
+    }).join("");
+  }
+  const add = '<section class="card"><h2>書類を足す</h2><form id="dcAdd" class="stack" style="gap:8px"><input type="text" id="dcName" maxlength="60" placeholder="書類の名前"><input type="text" id="dcNote" maxlength="80" placeholder="ひとこと（LINEの文に入ります。任意）"><button class="btn" type="submit">足す</button></form></section>';
+  return head + body + add + "</div>";
+}
+function copyText(t){ return (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("コピーしました。LINEに貼ってください"), () => { window.prompt("コピーしてください", t); }); }
+/* スタッフ：自分が頼まれている書類だけ（ほかの人の状況は見えない） */
+const DM = { list: [], at: 0 };
+async function loadMyDocs(){
+  if(DM.at && Date.now() - DM.at < 10 * 60e3) return; DM.at = Date.now();
+  try{
+    if(DEMO || !LIVE){ const m = mem.get("docsDemo", null), who = me(); if(!m || !who){ DM.list = []; return; }
+      const p = m.staff.find(x => x.name === who); DM.list = p ? m.types.filter(t => (m.st[p.id + "|" + t.id] || {}).status === "asked") : []; return; }
+    if(!AUTH.token){ DM.at = 0; return; }
+    DM.list = await rpc("lb_docs_mine", { p_token: AUTH.token }) || [];
+  }catch(e){ DM.list = []; }
+}
+function viewMyDocs(){
+  if(!DM.list.length) return "";
+  return '<section class="card"><div class="row"><h2>提出をお願いしている書類</h2><span class="pill">' + DM.list.length + "件</span></div>" +
+    '<ul class="lines">' + DM.list.map(d => "<li><div class=\"body\"><span>" + esc(d.name) + "</span>" + (d.note ? '<span class="sub">' + esc(d.note) + "</span>" : "") + "</div></li>").join("") + "</ul>" +
+    '<p class="sub" style="margin:0">出したら、管理者が「受取済」にします。わからないことは管理者に聞いてください。</p></section>';
+}
 function renderKanri(r){
   document.querySelector(".stabs").hidden = true;
   const kt = document.querySelector(".ktabs");
@@ -2099,6 +2200,7 @@ function renderKanri(r){
   let html, tab;
   if(r === "build"){ html = viewBuild(); tab = "build"; }
   else if(r === "shift"){ html = viewShift(); tab = "shift"; }
+  else if(r === "k-docs"){ html = viewKDocs(); tab = "k-docs"; if(!DC.at) loadDocs().then(render); }
   else { html = viewKToday(); tab = "k-today"; if(!KA.at) loadK().then(render); }
   $("#view").innerHTML = '<p class="kpill">管理者アプリ</p>' + html;
   kt.querySelectorAll("a").forEach(a => a.setAttribute("aria-current", a.dataset.tab === tab ? "page" : "false"));
@@ -2149,6 +2251,11 @@ function render(){
 $("#view").addEventListener("click", e => {
   if(nippoClick(e)) return;
   if(e.target.closest("[data-kreload]")){ loadK(true).then(render); render(); return; }
+  if(e.target.closest("[data-dcreload]")){ loadDocs().then(render); return; }
+  const dcb = e.target.closest("[data-dcby]"); if(dcb){ DC.by = dcb.dataset.dcby; mem.set("dcBy", DC.by); render(); return; }
+  const dcc = e.target.closest("[data-dc]"); if(dcc){ const [pid, tid] = dcc.dataset.dc.split("|"); dcSet(pid, tid, DC_NEXT[dcStatus(pid, tid)]).then(render); return; }
+  const dcy = e.target.closest("[data-dccopy]"); if(dcy){ const [k, id] = dcy.dataset.dccopy.split("|"); const t = k === "p" ? dcPersonText(DC.staff.find(p => p.id === id)) : dcTypeText(DC.types.find(x => x.id === id)); if(t) copyText(t); return; }
+  const dca = e.target.closest("[data-dcask]"); if(dca){ const pid = dca.dataset.dcask; (async () => { for(const t of DC.types) if(dcStatus(pid, t.id) === "none") await dcSet(pid, t.id, "asked"); render(); toast("まだの分を「頼んだ」にしました"); })(); return; }
   const pb = e.target.closest(".punch"); if(pb){ doPunch(pb.dataset.a); return; }
   const wm = e.target.closest("[data-wm]"); if(wm){ if(W.dirty && !confirm("まだ送っていない変更があります。別の月に移りますか？")) return; W.month = wm.dataset.wm; W.loaded = ""; render(); return; }
   const wmo = e.target.closest("[data-wmode]"); if(wmo){ W.mode = wmo.dataset.wmode; render(); return; }
@@ -2204,9 +2311,13 @@ $("#view").addEventListener("submit", async e => {
   if(e.target.id === "rtForm"){ rtSubmit(e.target); return; }
   if(e.target.id === "taskForm"){ const v = $("#taskIn").value.trim(); if(!v) return $("#taskIn").focus(); if(await addNote("task", v)) $("#taskIn").value = ""; }
   if(e.target.id === "buyForm"){ await sendBuy(); return; }
+  if(e.target.id === "dcAdd"){ const n = $("#dcName").value.trim(), no = $("#dcNote").value.trim(); if(!n) return;
+    try{ if(DEMO || !LIVE){ DC.types.push({ id: "t" + Date.now(), name: n, note: no, sort: 999 }); mem.set("docsDemo", { types: DC.types, staff: DC.staff, st: DC.st }); }
+      else { await rpc("lb_doc_type_put", { p_token: AUTH.token, p_id: null, p_name: n, p_note: no, p_sort: 900, p_active: true }); await loadDocs(); }
+      render(); toast("書類を足しました"); }catch(err){ toast(err.message); } return; }
   if(e.target.id === "noteForm"){ const v = $("#noteIn").value.trim(); if(!v) return $("#noteIn").focus(); if(await addNote("note", v)) $("#noteIn").value = ""; }
 });
-$("#view").addEventListener("change", e => { if(nippoInput(e.target)) return; if(e.target.classList && e.target.classList.contains("ldsel")){ setLeader(e.target.dataset.ld, e.target.value); return; } wishCapture(e.target); if(e.target.id === "bCap"){ B.cap = Math.max(2, Math.min(15, +e.target.value || 5)); mem.set("cap", B.cap); render(); } if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
+$("#view").addEventListener("change", e => { if(nippoInput(e.target)) return; if(e.target.id === "dcDue"){ DC.due = e.target.value; mem.set("dcDue", DC.due); return; } if(e.target.id === "dcWhere"){ DC.where = e.target.value.trim(); mem.set("dcWhere", DC.where); return; } if(e.target.classList && e.target.classList.contains("ldsel")){ setLeader(e.target.dataset.ld, e.target.value); return; } wishCapture(e.target); if(e.target.id === "bCap"){ B.cap = Math.max(2, Math.min(15, +e.target.value || 5)); mem.set("cap", B.cap); render(); } if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "rtRule"){ const w = document.getElementById("rtWd"); if(w) w.hidden = e.target.value === "gallery"; } });
 $("#view").addEventListener("input", e => { if(nippoInput(e.target)) return; wishCapture(e.target); if(e.target.closest && e.target.closest("#rtForm")) rtCapture(); if(e.target.id === "askIn"){ K.query = e.target.value; clearTimeout(window.__askT); window.__askT = setTimeout(render, 150); } });
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0,0); });
 document.addEventListener("visibilitychange", () => { if(!document.hidden) load(); });
@@ -2231,6 +2342,7 @@ if(DEMO){
 setInterval(() => { if(!document.hidden){ loadShifts().then(render); loadPunch().then(render); } }, 60000);
 loadPickups(true).then(render);
 loadLeaders(true).then(render);
+if(!KANRI){ loadMyDocs().then(render); setInterval(() => { if(!document.hidden) loadMyDocs().then(render); }, 60000); }
 if(KANRI) setInterval(() => { if(!document.hidden) loadK().then(render); }, 60000);
 setInterval(() => { if(!document.hidden) loadLeaders().then(render); }, 60000);
 /* 開くたびに名前と役割を確かめ直す（表示名や役割を変えたとき、入り直さなくても反映されるように） */
